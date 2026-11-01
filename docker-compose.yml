@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  finops-platform:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: finops-analytics-platform
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+    volumes:
+      - finops-data:/app/data
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  finops-data:
+    driver: local

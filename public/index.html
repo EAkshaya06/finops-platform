@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cloud Cost Optimization & FinOps Analytics Platform</title>
+  <meta name="description" content="Production-grade Multi-Cloud FinOps Platform powered by Node.js v22 built-in SQLite engine">
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            finops: {
+              bg: '#0A0F1D',
+              surface: '#111827',
+              border: '#1F293D',
+              card: '#131D31',
+              accent: '#3B82F6',
+              aws: '#FF9900',
+              gcp: '#4285F4',
+              azure: '#0089D6',
+              success: '#10B981',
+              warning: '#F59E0B',
+              danger: '#EF4444'
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <!-- Custom Styles -->
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body class="bg-[#0A0F1D] text-slate-100 min-h-screen flex flex-col antialiased selection:bg-blue-600 selection:text-white">
+
+  <!-- Top Navigation Header -->
+  <header class="border-b border-slate-800/80 bg-[#0F172A]/90 backdrop-blur-md sticky top-0 z-40">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-4">
+        <div class="h-10 w-10 rounded-xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-emerald-500 flex items-center justify-center shadow-lg shadow-blue-500/20">
+          <i data-lucide="layers" class="w-5 h-5 text-white"></i>
+        </div>
+        <div>
+          <div class="flex items-center space-x-2">
+            <h1 class="text-lg font-bold tracking-tight text-white">FinOps Cloud Analytics</h1>
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1.5 live-indicator"></span>
+              v22 Built-in SQLite
+            </span>
+          </div>
+          <p class="text-xs text-slate-400 hidden sm:block">Multi-Cloud Cost Governance: AWS · GCP · Azure</p>
+        </div>
+      </div>
+
+      <!-- Provider Status Badges & Action Buttons -->
+      <div class="flex items-center space-x-3">
+        <div class="hidden md:flex items-center space-x-2 text-xs bg-slate-900/80 px-3 py-1.5 rounded-lg border border-slate-800">
+          <span class="flex items-center space-x-1">
+            <span class="w-2 h-2 rounded-full bg-amber-500"></span>
+            <span class="text-slate-300 font-medium">AWS</span>
+          </span>
+          <span class="text-slate-600">|</span>
+          <span class="flex items-center space-x-1">
+            <span class="w-2 h-2 rounded-full bg-blue-500"></span>
+            <span class="text-slate-300 font-medium">GCP</span>
+          </span>
+          <span class="text-slate-600">|</span>
+          <span class="flex items-center space-x-1">
+            <span class="w-2 h-2 rounded-full bg-sky-400"></span>
+            <span class="text-slate-300 font-medium">Azure</span>
+          </span>
+        </div>
+
+        <!-- Ingest Trigger -->
+        <button id="openIngestModalBtn" class="flex items-center space-x-1.5 bg-blue-600/90 hover:bg-blue-600 text-white text-xs font-semibold px-3 py-2 rounded-lg transition-all shadow-sm shadow-blue-600/30">
+          <i data-lucide="plus-circle" class="w-3.5 h-3.5"></i>
+          <span>Ingest Billing</span>
+        </button>
+
+        <!-- Export Hub Dropdown / Buttons -->
+        <div class="flex items-center space-x-1.5">
+          <button id="exportCsvBtn" title="Export Full Audit Log to CSV" class="flex items-center space-x-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium px-3 py-2 rounded-lg border border-slate-700 transition">
+            <i data-lucide="file-spreadsheet" class="w-3.5 h-3.5 text-emerald-400"></i>
+            <span class="hidden sm:inline">CSV</span>
+          </button>
+          <button id="exportJsonBtn" title="Export Executive FinOps Audit Spec to JSON" class="flex items-center space-x-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium px-3 py-2 rounded-lg border border-slate-700 transition">
+            <i data-lucide="code" class="w-3.5 h-3.5 text-blue-400"></i>
+            <span class="hidden sm:inline">JSON</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content Layout -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+
+    <!-- 1. Executive FinOps 4 KPI Cards -->
+    <section>
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-sm font-semibold tracking-wider text-slate-400 uppercase">Executive Overview</h2>
+        <span id="dateRangeLabel" class="text-xs text-slate-500 font-mono">Syncing billing data...</span>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <!-- KPI 1: Total Spend -->
+        <div class="glass-panel p-5 rounded-2xl border border-slate-800 relative overflow-hidden group">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-medium text-slate-400">Total Spend (6 Months)</span>
+            <div class="p-2 rounded-xl bg-blue-500/10 text-blue-400">
+              <i data-lucide="credit-card" class="w-4 h-4"></i>
+            </div>
+          </div>
+          <div class="mt-3 flex items-baseline justify-between">
+            <span id="kpiTotalSpend" class="text-2xl font-extrabold tracking-tight text-white font-mono">$0.00</span>
+            <span id="kpiPeriodGrowth" class="text-xs font-medium text-emerald-400 flex items-center">
+              <i data-lucide="trending-up" class="w-3 h-3 mr-0.5"></i> +0.0%
+            </span>
+          </div>
+          <p class="text-[11px] text-slate-500 mt-2">Aggregate across AWS, GCP, and Azure</p>
+        </div>
+
+        <!-- KPI 2: Daily Burn Rate -->
+        <div class="glass-panel p-5 rounded-2xl border border-slate-800 relative overflow-hidden group">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-medium text-slate-400">Daily Burn Rate</span>
+            <div class="p-2 rounded-xl bg-amber-500/10 text-amber-400">
+              <i data-lucide="flame" class="w-4 h-4"></i>
+            </div>
+          </div>
+          <div class="mt-3 flex items-baseline justify-between">
+            <span id="kpiDailyBurn" class="text-2xl font-extrabold tracking-tight text-white font-mono">$0.00</span>
+            <span class="text-xs font-medium text-slate-400">/ day</span>
+          </div>
+          <p class="text-[11px] text-slate-500 mt-2">7-Day Rolling Velocity Average</p>
+        </div>
+
+        <!-- KPI 3: 30-Day Cost Projection -->
+        <div class="glass-panel p-5 rounded-2xl border border-slate-800 relative overflow-hidden group">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-medium text-slate-400">30-Day Projection</span>
+            <div class="p-2 rounded-xl bg-purple-500/10 text-purple-400">
+              <i data-lucide="trending-up" class="w-4 h-4"></i>
+            </div>
+          </div>
+          <div class="mt-3 flex items-baseline justify-between">
+            <span id="kpi30DayProjection" class="text-2xl font-extrabold tracking-tight text-purple-200 font-mono">$0.00</span>
+            <span id="projectionSavingsDeduction" class="text-[11px] font-medium text-emerald-400 hidden sm:inline">- $0/mo savings</span>
+          </div>
+          <p class="text-[11px] text-slate-500 mt-2">Adjusted dynamically with active ROI</p>
+        </div>
+
+        <!-- KPI 4: Real-Time Savings Tracker -->
+        <div class="glass-panel p-5 rounded-2xl border border-emerald-500/30 bg-emerald-950/10 relative overflow-hidden group">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-medium text-emerald-300">Realized Monthly Savings</span>
+            <div class="p-2 rounded-xl bg-emerald-500/20 text-emerald-300">
+              <i data-lucide="sparkles" class="w-4 h-4"></i>
+            </div>
+          </div>
+          <div class="mt-3 flex items-baseline justify-between">
+            <span id="kpiRealizedSavings" class="text-2xl font-extrabold tracking-tight text-emerald-400 font-mono">$0.00</span>
+            <span id="kpiAppliedCount" class="text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-medium">0 Applied</span>
+          </div>
+          <p class="text-[11px] text-emerald-500/80 mt-2">Live optimization ROI recalculation</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2. Primary Charts: Daily Spend Area Chart & Provider Donut -->
+    <section class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      
+      <!-- Daily Spend Trend Area Chart (8 Columns) -->
+      <div class="lg:col-span-8 glass-panel p-6 rounded-2xl border border-slate-800 flex flex-col justify-between">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+          <div>
+            <h3 class="text-base font-semibold text-white">Daily Multi-Cloud Spend Velocity</h3>
+            <p class="text-xs text-slate-400 mt-0.5">Historical burn curve across AWS, GCP, and Azure</p>
+          </div>
+          <!-- Date Filter Controls -->
+          <div class="inline-flex rounded-lg bg-slate-900 p-1 border border-slate-800 self-start sm:self-auto">
+            <button class="trend-filter-btn px-3 py-1 text-xs font-medium rounded-md text-slate-300 hover:text-white transition" data-range="30d">30d</button>
+            <button class="trend-filter-btn px-3 py-1 text-xs font-medium rounded-md text-slate-300 hover:text-white transition" data-range="60d">60d</button>
+            <button class="trend-filter-btn px-3 py-1 text-xs font-medium rounded-md text-slate-300 hover:text-white transition" data-range="90d">90d</button>
+            <button class="trend-filter-btn px-3 py-1 text-xs font-medium rounded-md bg-blue-600 text-white font-semibold transition" data-range="180d">180d</button>
+          </div>
+        </div>
+
+        <div class="h-72 w-full relative">
+          <canvas id="trendChart"></canvas>
+        </div>
+      </div>
+
+      <!-- Provider Spend Split Donut Chart (4 Columns) -->
+      <div class="lg:col-span-4 glass-panel p-6 rounded-2xl border border-slate-800 flex flex-col justify-between">
+        <div class="mb-4">
+          <h3 class="text-base font-semibold text-white">Provider Allocation</h3>
+          <p class="text-xs text-slate-400 mt-0.5">Spend distribution across cloud vendors</p>
+        </div>
+
+        <div class="h-56 relative flex items-center justify-center">
+          <canvas id="providerDonutChart"></canvas>
+        </div>
+
+        <div id="providerLegendContainer" class="mt-4 space-y-2 border-t border-slate-800/80 pt-4 text-xs">
+          <!-- Dynamically populated provider breakdowns -->
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. Secondary Row: Top 6 Cost-Driving Services & Category Progress Bars -->
+    <section class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      
+      <!-- Top 6 Services Horizontal Bar Chart (6 Columns) -->
+      <div class="lg:col-span-6 glass-panel p-6 rounded-2xl border border-slate-800">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h3 class="text-base font-semibold text-white">Top 6 Cost-Driving Services</h3>
+            <p class="text-xs text-slate-400 mt-0.5">Highest expenditure cloud resources</p>
+          </div>
+          <span class="text-xs text-slate-500 font-mono">Ranked by Total Spend</span>
+        </div>
+
+        <div class="h-64 relative">
+          <canvas id="servicesBarChart"></canvas>
+        </div>
+      </div>
+
+      <!-- Category Progress Bars (6 Columns) -->
+      <div class="lg:col-span-6 glass-panel p-6 rounded-2xl border border-slate-800 flex flex-col justify-between">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h3 class="text-base font-semibold text-white">Category Spend Breakdown</h3>
+            <p class="text-xs text-slate-400 mt-0.5">Budget utilization by architecture tier</p>
+          </div>
+          <span class="text-xs text-slate-500 font-mono">5 Architecture Domains</span>
+        </div>
+
+        <div id="categoryBarsContainer" class="space-y-4 my-auto">
+          <!-- Populated dynamically via JS -->
+        </div>
+      </div>
+    </section>
+
+    <!-- 4. Anomaly Detection Center -->
+    <section class="glass-panel p-6 rounded-2xl border border-slate-800 space-y-5">
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <div class="flex items-center space-x-2">
+            <h3 class="text-lg font-bold text-white flex items-center gap-2">
+              <i data-lucide="alert-triangle" class="w-5 h-5 text-amber-400"></i>
+              Anomaly Detection Center
+            </h3>
+            <span id="openAnomaliesBadge" class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-500/20 text-rose-300 border border-rose-500/30">
+              0 Active Spikes
+            </span>
+          </div>
+          <p class="text-xs text-slate-400 mt-1">Statistical deviation detector flagging cost spikes (&gt;30% variance from 14-day rolling mean) and orphaned resources.</p>
+        </div>
+
+        <div class="flex items-center space-x-2">
+          <!-- Filter Tabs -->
+          <div class="inline-flex rounded-lg bg-slate-900 p-1 border border-slate-800 text-xs">
+            <button class="anomaly-filter-btn px-3 py-1 font-medium rounded-md bg-slate-800 text-white" data-filter="all">All</button>
+            <button class="anomaly-filter-btn px-3 py-1 font-medium rounded-md text-slate-400 hover:text-white" data-filter="open">Open</button>
+            <button class="anomaly-filter-btn px-3 py-1 font-medium rounded-md text-slate-400 hover:text-white" data-filter="resolved">Resolved</button>
+          </div>
+
+          <!-- Trigger Statistical Scan -->
+          <button id="runScanBtn" class="flex items-center space-x-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold px-3 py-2 rounded-lg border border-slate-700 transition">
+            <i data-lucide="scan" class="w-3.5 h-3.5 text-blue-400"></i>
+            <span>Run Baseline Scan</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Anomalies List / Cards -->
+      <div id="anomaliesListContainer" class="space-y-3">
+        <!-- Rendered via JS -->
+      </div>
+    </section>
+
+    <!-- 5. Cost Optimization & Action Hub -->
+    <section class="glass-panel p-6 rounded-2xl border border-slate-800 space-y-5">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div>
+          <div class="flex items-center space-x-2">
+            <h3 class="text-lg font-bold text-white flex items-center gap-2">
+              <i data-lucide="sparkles" class="w-5 h-5 text-emerald-400"></i>
+              Cost Optimization & Action Hub
+            </h3>
+            <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
+              Instant ROI Engine
+            </span>
+          </div>
+          <p class="text-xs text-slate-400 mt-1">Prioritized rightsizing and reservation actions. Applying an action updates the database and recalculates executive dashboard burn rates in real-time.</p>
+        </div>
+        <div class="text-right">
+          <span class="text-xs text-slate-400">Available Potential Savings:</span>
+          <span id="potentialSavingsLabel" class="block text-sm font-bold text-emerald-400 font-mono">$0.00/mo</span>
+        </div>
+      </div>
+
+      <!-- Recommendations Cards Grid -->
+      <div id="recommendationsGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <!-- Rendered via JS -->
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Ingestion Modal -->
+  <div id="ingestModal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-[#111827] border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl relative space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <h3 class="text-base font-bold text-white flex items-center gap-2">
+          <i data-lucide="cloud-upload" class="w-5 h-5 text-blue-400"></i>
+          Ingest Cloud Billing Record
+        </h3>
+        <button id="closeIngestModalBtn" class="text-slate-400 hover:text-white">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <form id="ingestForm" class="space-y-4 text-xs">
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-slate-400 mb-1">Billing Date</label>
+            <input type="date" id="ingestDate" required class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500">
+          </div>
+          <div>
+            <label class="block text-slate-400 mb-1">Cloud Provider</label>
+            <select id="ingestProvider" required class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500">
+              <option value="AWS">AWS</option>
+              <option value="GCP">GCP</option>
+              <option value="Azure">Azure</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-slate-400 mb-1">Cloud Service</label>
+            <input type="text" id="ingestService" placeholder="e.g. EC2, BigQuery" required class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500">
+          </div>
+          <div>
+            <label class="block text-slate-400 mb-1">Category</label>
+            <select id="ingestCategory" required class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500">
+              <option value="Compute">Compute</option>
+              <option value="Storage">Storage</option>
+              <option value="Database">Database</option>
+              <option value="Networking">Networking</option>
+              <option value="Serverless">Serverless</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-slate-400 mb-1">Region</label>
+            <input type="text" id="ingestRegion" placeholder="e.g. us-east-1, eastus" required class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500">
+          </div>
+          <div>
+            <label class="block text-slate-400 mb-1">Incurred Cost (USD $)</label>
+            <input type="number" step="0.01" id="ingestCost" placeholder="125.50" required class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500 font-mono">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-slate-400 mb-1">Usage Amount</label>
+            <input type="number" step="0.01" id="ingestUsage" placeholder="720" required class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500 font-mono">
+          </div>
+          <div>
+            <label class="block text-slate-400 mb-1">Usage Unit</label>
+            <input type="text" id="ingestUnit" placeholder="Hrs, GB, Queries" required class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500">
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-slate-400 mb-1">Cloud Resource Identifier</label>
+          <input type="text" id="ingestResourceId" placeholder="e.g. i-087fb23c9a12, arn:aws:s3:::bucket" required class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500 font-mono">
+        </div>
+
+        <div class="pt-2 flex justify-end space-x-2">
+          <button type="button" id="cancelIngestBtn" class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300">Cancel</button>
+          <button type="submit" class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold flex items-center space-x-1.5">
+            <i data-lucide="check" class="w-4 h-4"></i>
+            <span>Commit Record to DB</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col space-y-2 pointer-events-none"></div>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-800/80 bg-[#0F172A]/40 mt-12 py-6 text-center text-xs text-slate-500">
+    <div class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
+      <p>Cloud Cost Optimization & FinOps Analytics Platform &middot; Powered by Node.js v22 built-in SQLite engine</p>
+      <p class="font-mono text-slate-400">Zero External Database Dependencies &middot; Full Real-Time Sync</p>
+    </div>
+  </footer>
+
+  <!-- App Logic -->
+  <script src="/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,24 @@
+{
+  "name": "finops-cloud-cost-platform",
+  "version": "1.0.0",
+  "description": "Production-grade Cloud Cost Optimization & FinOps Analytics Platform",
+  "main": "server.js",
+  "scripts": {
+    "start": "node --no-warnings server.js",
+    "seed": "node --no-warnings seed.js",
+    "test": "node --no-warnings test.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2"
+  },
+  "keywords": [
+    "finops",
+    "cloud-cost-optimization",
+    "aws",
+    "gcp",
+    "azure",
+    "sqlite"
+  ],
+  "author": "FinOps Platform Team",
+  "license": "MIT"
+}

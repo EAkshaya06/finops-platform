@@ -20,5 +20,8 @@
     "sqlite"
   ],
   "author": "FinOps Platform Team",
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "vercel": "^65.9.0"
+  }
 }

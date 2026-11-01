@@ -7,3 +7,5 @@ Thumbs.db
 .env.local
 .vercel
 *.log
+
+.vercel

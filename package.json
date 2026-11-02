@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "Production-grade Cloud Cost Optimization & FinOps Analytics Platform",
   "main": "server.js",
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "scripts": {
     "start": "node --no-warnings server.js",
     "seed": "node --no-warnings seed.js",

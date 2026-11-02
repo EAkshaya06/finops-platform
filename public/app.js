@@ -173,6 +173,17 @@ document.addEventListener('DOMContentLoaded', () => {
         rangeEl.textContent = `${label} &bull; ${kpis.totalRecords} records`;
       }
 
+      // Sync record counters across navbar, banner, and table badges
+      if (kpis.totalRecords !== undefined) {
+        const formattedTotal = kpis.totalRecords.toLocaleString();
+        const navBadge = document.getElementById('navRecordsBadge');
+        if (navBadge) navBadge.textContent = formattedTotal;
+        const bannerCount = document.getElementById('bannerRecordCount');
+        if (bannerCount) bannerCount.textContent = formattedTotal;
+        const tableBadge = document.getElementById('tableTotalRecordsBadge');
+        if (tableBadge) tableBadge.textContent = `${formattedTotal} Records`;
+      }
+
       refreshIcons();
     } catch (err) {
       console.error('Failed to load KPIs:', err);
@@ -594,20 +605,40 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!json.success) return;
 
       const tbody = document.getElementById('billingRecordsTbody');
+      const badge = document.getElementById('tableTotalRecordsBadge');
+      if (badge) badge.textContent = `${json.total.toLocaleString()} Records`;
+      const navBadge = document.getElementById('navRecordsBadge');
+      if (navBadge) navBadge.textContent = `${json.total.toLocaleString()}`;
+      const bannerCount = document.getElementById('bannerRecordCount');
+      if (bannerCount) bannerCount.textContent = `${json.total.toLocaleString()}`;
+
       if (json.records.length === 0) {
         tbody.innerHTML = `
           <tr>
-            <td colspan="8" class="text-center py-8 text-slate-500 text-xs">
-              No billing records found matching your filters.
+            <td colspan="9" class="text-center py-8 text-slate-500 text-xs">
+              <i data-lucide="inbox" class="w-7 h-7 mx-auto text-slate-600 mb-2"></i>
+              <p>No billing records found matching your filters.</p>
+              <button id="resetRecordsFilterBtn" class="mt-2.5 inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs transition">
+                <i data-lucide="rotate-ccw" class="w-3 h-3"></i>
+                <span>Reset Filters to Show All Records</span>
+              </button>
             </td>
           </tr>
         `;
+        refreshIcons();
+        const resetBtn = document.getElementById('resetRecordsFilterBtn');
+        if (resetBtn) {
+          resetBtn.addEventListener('click', () => {
+            document.getElementById('resetFiltersBtn').click();
+          });
+        }
         document.getElementById('recordsPaginationInfo').textContent = '0 records found';
         return;
       }
 
       tbody.innerHTML = json.records.map(r => `
-        <tr class="hover:bg-slate-900/60 transition">
+        <tr class="hover:bg-slate-900/60 transition" id="record-row-${r.id}">
+          <td class="py-3 px-3 font-mono text-slate-400 font-semibold">#${r.id}</td>
           <td class="py-3 px-4 font-mono text-slate-400">${r.date}</td>
           <td class="py-3 px-4">
             <span class="px-2 py-0.5 rounded text-[10px] font-mono font-semibold ${
@@ -1019,6 +1050,8 @@ document.addEventListener('DOMContentLoaded', () => {
   };
   document.getElementById('openIngestModalBtn').addEventListener('click', openIngestModal);
   document.getElementById('addRecordTableBtn').addEventListener('click', openIngestModal);
+  const quickAddBtn = document.getElementById('addRecordQuickBtn');
+  if (quickAddBtn) quickAddBtn.addEventListener('click', openIngestModal);
   document.getElementById('closeIngestModalBtn').addEventListener('click', () => ingestModal.classList.add('hidden'));
   document.getElementById('cancelIngestBtn').addEventListener('click', () => ingestModal.classList.add('hidden'));
 
@@ -1053,7 +1086,39 @@ document.addEventListener('DOMContentLoaded', () => {
         showToast('Billing record created successfully.', 'success');
         ingestModal.classList.add('hidden');
         document.getElementById('ingestForm').reset();
+
+        // Reset search and pagination to page 1 so user immediately sees their record at the top of the table
+        recordsPage = 1;
+        recordsSearch = '';
+        const searchInput = document.getElementById('recordsSearchInput');
+        if (searchInput) searchInput.value = '';
+
+        // If active month filter doesn't match the new record's month, reset to 'all' so it is visible
+        const recordMonth = payload.date.slice(0, 7);
+        if (selectedMonth !== 'all' && selectedMonth !== recordMonth) {
+          selectedMonth = 'all';
+          const monthSelect = document.getElementById('filterMonthSelect');
+          if (monthSelect) monthSelect.value = 'all';
+        }
+
         await refreshDashboard();
+
+        // Smooth scroll straight down to the Billing Records Table
+        const tableSec = document.getElementById('billingRecordsSection');
+        if (tableSec) {
+          tableSec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        // Highlight the newly created record in green so user clearly sees it
+        if (json.record && json.record.id) {
+          setTimeout(() => {
+            const row = document.getElementById(`record-row-${json.record.id}`);
+            if (row) {
+              row.classList.add('bg-emerald-950/70', 'ring-2', 'ring-emerald-400');
+              setTimeout(() => row.classList.remove('bg-emerald-950/70', 'ring-2', 'ring-emerald-400'), 5000);
+            }
+          }, 300);
+        }
       } else {
         showToast(json.error || 'Failed to create record.', 'danger');
       }

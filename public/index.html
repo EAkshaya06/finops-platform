@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Cloud Cost Optimization & FinOps Analytics Platform</title>
   <meta name="description" content="Production-grade Multi-Cloud FinOps Platform powered by Node.js v22 built-in SQLite engine">
-  
+
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
@@ -56,47 +56,39 @@
             <h1 class="text-lg font-bold tracking-tight text-white">FinOps Cloud Analytics</h1>
             <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
               <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1.5 live-indicator"></span>
-              v22 Built-in SQLite
+              v22 SQLite Engine
             </span>
           </div>
-          <p class="text-xs text-slate-400 hidden sm:block">Multi-Cloud Cost Governance: AWS · GCP · Azure</p>
+          <p class="text-xs text-slate-400 hidden sm:block">Multi-Cloud Cost Governance: AWS &middot; GCP &middot; Azure</p>
         </div>
       </div>
 
-      <!-- Provider Status Badges & Action Buttons -->
+      <!-- Action Buttons & Export Hub -->
       <div class="flex items-center space-x-3">
-        <div class="hidden md:flex items-center space-x-2 text-xs bg-slate-900/80 px-3 py-1.5 rounded-lg border border-slate-800">
-          <span class="flex items-center space-x-1">
-            <span class="w-2 h-2 rounded-full bg-amber-500"></span>
-            <span class="text-slate-300 font-medium">AWS</span>
-          </span>
-          <span class="text-slate-600">|</span>
-          <span class="flex items-center space-x-1">
-            <span class="w-2 h-2 rounded-full bg-blue-500"></span>
-            <span class="text-slate-300 font-medium">GCP</span>
-          </span>
-          <span class="text-slate-600">|</span>
-          <span class="flex items-center space-x-1">
-            <span class="w-2 h-2 rounded-full bg-sky-400"></span>
-            <span class="text-slate-300 font-medium">Azure</span>
-          </span>
-        </div>
-
-        <!-- Ingest Trigger -->
-        <button id="openIngestModalBtn" class="flex items-center space-x-1.5 bg-blue-600/90 hover:bg-blue-600 text-white text-xs font-semibold px-3 py-2 rounded-lg transition-all shadow-sm shadow-blue-600/30">
+        <!-- Add Billing Record -->
+        <button id="openIngestModalBtn" class="flex items-center space-x-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-3 py-2 rounded-lg transition-all shadow-sm shadow-blue-600/30">
           <i data-lucide="plus-circle" class="w-3.5 h-3.5"></i>
-          <span>Ingest Billing</span>
+          <span>Add Record</span>
         </button>
 
-        <!-- Export Hub Dropdown / Buttons -->
+        <!-- Set Monthly Budget -->
+        <button id="openBudgetModalBtn" class="flex items-center space-x-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold px-3 py-2 rounded-lg border border-slate-700 transition">
+          <i data-lucide="wallet" class="w-3.5 h-3.5 text-amber-400"></i>
+          <span class="hidden sm:inline">Set Budget</span>
+        </button>
+
+        <!-- Report Download Group -->
         <div class="flex items-center space-x-1.5">
+          <button id="exportPdfBtn" title="Download Printable Executive PDF Report" class="flex items-center space-x-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium px-3 py-2 rounded-lg border border-slate-700 transition">
+            <i data-lucide="file-text" class="w-3.5 h-3.5 text-rose-400"></i>
+            <span class="hidden sm:inline">PDF Report</span>
+          </button>
           <button id="exportCsvBtn" title="Export Full Audit Log to CSV" class="flex items-center space-x-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium px-3 py-2 rounded-lg border border-slate-700 transition">
             <i data-lucide="file-spreadsheet" class="w-3.5 h-3.5 text-emerald-400"></i>
             <span class="hidden sm:inline">CSV</span>
           </button>
-          <button id="exportJsonBtn" title="Export Executive FinOps Audit Spec to JSON" class="flex items-center space-x-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium px-3 py-2 rounded-lg border border-slate-700 transition">
+          <button id="exportJsonBtn" title="Export Executive FinOps Audit Spec to JSON" class="flex items-center space-x-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium px-2.5 py-2 rounded-lg border border-slate-700 transition">
             <i data-lucide="code" class="w-3.5 h-3.5 text-blue-400"></i>
-            <span class="hidden sm:inline">JSON</span>
           </button>
         </div>
       </div>
@@ -104,20 +96,62 @@
   </header>
 
   <!-- Main Content Layout -->
-  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
 
-    <!-- 1. Executive FinOps 4 KPI Cards -->
+    <!-- 1. Interactive Scope & Date Filter Bar -->
+    <section class="glass-panel p-4 rounded-2xl border border-slate-800 flex flex-wrap items-center justify-between gap-4">
+      <div class="flex flex-wrap items-center gap-3 text-xs">
+        <div class="flex items-center space-x-1.5 text-slate-400 font-semibold uppercase tracking-wider">
+          <i data-lucide="calendar" class="w-4 h-4 text-blue-400"></i>
+          <span>Filter Scope:</span>
+        </div>
+
+        <!-- Month Filter Dropdown -->
+        <div class="flex items-center space-x-1.5">
+          <span class="text-slate-400">Month:</span>
+          <select id="filterMonthSelect" class="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white focus:outline-none focus:border-blue-500 font-mono">
+            <option value="all">All Available History</option>
+            <!-- Populated via JS -->
+          </select>
+        </div>
+
+        <!-- Provider Filter Pills -->
+        <div class="inline-flex rounded-lg bg-slate-900 p-1 border border-slate-800">
+          <button class="provider-pill-btn px-2.5 py-1 font-medium rounded-md bg-blue-600 text-white" data-provider="all">All</button>
+          <button class="provider-pill-btn px-2.5 py-1 font-medium rounded-md text-slate-400 hover:text-white" data-provider="AWS">AWS</button>
+          <button class="provider-pill-btn px-2.5 py-1 font-medium rounded-md text-slate-400 hover:text-white" data-provider="GCP">GCP</button>
+          <button class="provider-pill-btn px-2.5 py-1 font-medium rounded-md text-slate-400 hover:text-white" data-provider="Azure">Azure</button>
+        </div>
+      </div>
+
+      <!-- Custom Date Range -->
+      <div class="flex flex-wrap items-center gap-2 text-xs">
+        <span class="text-slate-400">Range:</span>
+        <input type="date" id="filterStartDate" class="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-slate-200 focus:outline-none focus:border-blue-500 font-mono">
+        <span class="text-slate-500">to</span>
+        <input type="date" id="filterEndDate" class="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-slate-200 focus:outline-none focus:border-blue-500 font-mono">
+        <button id="applyCustomDateBtn" class="bg-blue-600 hover:bg-blue-500 text-white font-medium px-3 py-1 rounded-lg transition">Apply</button>
+        <button id="resetFiltersBtn" class="bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium px-2.5 py-1 rounded-lg transition" title="Reset all filters">
+          <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
+        </button>
+      </div>
+    </section>
+
+    <!-- Budget Warning Alert Banner (Rendered dynamically when >= 80% or >= 100%) -->
+    <div id="budgetAlertBanner" class="hidden rounded-xl p-4 border flex items-center justify-between gap-3 text-xs transition-all"></div>
+
+    <!-- 2. Executive FinOps 4 KPI Cards -->
     <section>
-      <div class="flex items-center justify-between mb-4">
-        <h2 class="text-sm font-semibold tracking-wider text-slate-400 uppercase">Executive Overview</h2>
-        <span id="dateRangeLabel" class="text-xs text-slate-500 font-mono">Syncing billing data...</span>
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-xs font-semibold tracking-wider text-slate-400 uppercase">Executive Performance Overview</h2>
+        <span id="dateRangeLabel" class="text-xs text-slate-500 font-mono">Syncing telemetry...</span>
       </div>
 
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <!-- KPI 1: Total Spend -->
         <div class="glass-panel p-5 rounded-2xl border border-slate-800 relative overflow-hidden group">
           <div class="flex items-center justify-between">
-            <span class="text-xs font-medium text-slate-400">Total Spend (6 Months)</span>
+            <span class="text-xs font-medium text-slate-400">Total Spend in Scope</span>
             <div class="p-2 rounded-xl bg-blue-500/10 text-blue-400">
               <i data-lucide="credit-card" class="w-4 h-4"></i>
             </div>
@@ -128,13 +162,13 @@
               <i data-lucide="trending-up" class="w-3 h-3 mr-0.5"></i> +0.0%
             </span>
           </div>
-          <p class="text-[11px] text-slate-500 mt-2">Aggregate across AWS, GCP, and Azure</p>
+          <p class="text-[11px] text-slate-500 mt-2" id="kpiRecordsSubtext">Aggregated across active workloads</p>
         </div>
 
         <!-- KPI 2: Daily Burn Rate -->
         <div class="glass-panel p-5 rounded-2xl border border-slate-800 relative overflow-hidden group">
           <div class="flex items-center justify-between">
-            <span class="text-xs font-medium text-slate-400">Daily Burn Rate</span>
+            <span class="text-xs font-medium text-slate-400">Daily Burn Velocity</span>
             <div class="p-2 rounded-xl bg-amber-500/10 text-amber-400">
               <i data-lucide="flame" class="w-4 h-4"></i>
             </div>
@@ -149,16 +183,16 @@
         <!-- KPI 3: 30-Day Cost Projection -->
         <div class="glass-panel p-5 rounded-2xl border border-slate-800 relative overflow-hidden group">
           <div class="flex items-center justify-between">
-            <span class="text-xs font-medium text-slate-400">30-Day Projection</span>
+            <span class="text-xs font-medium text-slate-400">30-Day Projected Spend</span>
             <div class="p-2 rounded-xl bg-purple-500/10 text-purple-400">
               <i data-lucide="trending-up" class="w-4 h-4"></i>
             </div>
           </div>
           <div class="mt-3 flex items-baseline justify-between">
             <span id="kpi30DayProjection" class="text-2xl font-extrabold tracking-tight text-purple-200 font-mono">$0.00</span>
-            <span id="projectionSavingsDeduction" class="text-[11px] font-medium text-emerald-400 hidden sm:inline">- $0/mo savings</span>
+            <span id="projectionSavingsDeduction" class="text-[11px] font-medium text-emerald-400 hidden sm:inline">- $0/mo</span>
           </div>
-          <p class="text-[11px] text-slate-500 mt-2">Adjusted dynamically with active ROI</p>
+          <p class="text-[11px] text-slate-500 mt-2">Forecast minus realized optimization ROI</p>
         </div>
 
         <!-- KPI 4: Real-Time Savings Tracker -->
@@ -171,29 +205,147 @@
           </div>
           <div class="mt-3 flex items-baseline justify-between">
             <span id="kpiRealizedSavings" class="text-2xl font-extrabold tracking-tight text-emerald-400 font-mono">$0.00</span>
-            <span id="kpiAppliedCount" class="text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-medium">0 Applied</span>
+            <span id="kpiAppliedCount" class="text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-medium font-mono">0 Applied</span>
           </div>
-          <p class="text-[11px] text-emerald-500/80 mt-2">Live optimization ROI recalculation</p>
+          <p class="text-[11px] text-emerald-500/80 mt-2">Closed-loop optimization execution</p>
         </div>
       </div>
     </section>
 
-    <!-- 2. Primary Charts: Daily Spend Area Chart & Provider Donut -->
+    <!-- 3. Budget Management & Monthly Comparison Row (2 Columns) -->
     <section class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-      
+
+      <!-- Budget Management Card (6 Columns) -->
+      <div class="lg:col-span-6 glass-panel p-6 rounded-2xl border border-slate-800 flex flex-col justify-between space-y-4">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center space-x-2">
+            <div class="p-2 rounded-xl bg-amber-500/10 text-amber-400">
+              <i data-lucide="wallet" class="w-4 h-4"></i>
+            </div>
+            <div>
+              <h3 class="text-base font-semibold text-white">Monthly Budget Governance</h3>
+              <p class="text-xs text-slate-400">Budget limit vs. incurred month-to-date spend</p>
+            </div>
+          </div>
+          <button id="editBudgetBtn" class="text-xs font-semibold text-blue-400 hover:text-blue-300 flex items-center space-x-1">
+            <i data-lucide="edit-3" class="w-3.5 h-3.5"></i>
+            <span>Set Budget</span>
+          </button>
+        </div>
+
+        <div class="grid grid-cols-3 gap-3 text-xs bg-slate-900/60 p-3.5 rounded-xl border border-slate-800">
+          <div>
+            <span class="text-slate-400 block text-[11px]">Allocated Budget</span>
+            <span id="budgetAmountLabel" class="text-base font-bold text-white font-mono">$0.00</span>
+          </div>
+          <div>
+            <span class="text-slate-400 block text-[11px]">Current Spend</span>
+            <span id="budgetCurrentSpendLabel" class="text-base font-bold text-amber-400 font-mono">$0.00</span>
+          </div>
+          <div>
+            <span class="text-slate-400 block text-[11px]">Remaining Balance</span>
+            <span id="budgetRemainingLabel" class="text-base font-bold text-emerald-400 font-mono">$0.00</span>
+          </div>
+        </div>
+
+        <!-- Progress Bar & Status -->
+        <div class="space-y-1.5">
+          <div class="flex justify-between text-xs font-mono">
+            <span class="text-slate-400">Budget Utilization</span>
+            <span id="budgetUtilizationPctLabel" class="font-bold text-slate-200">0%</span>
+          </div>
+          <div class="w-full bg-slate-900 rounded-full h-3 overflow-hidden border border-slate-800">
+            <div id="budgetProgressBar" class="h-3 rounded-full transition-all duration-700 bg-emerald-500" style="width: 0%"></div>
+          </div>
+          <p id="budgetStatusDescription" class="text-[11px] text-slate-400 mt-1">Monitoring monthly spend against allocated thresholds (80% warning, 100% critical).</p>
+        </div>
+      </div>
+
+      <!-- Monthly Cost Comparison & Savings Calculator (6 Columns) -->
+      <div class="lg:col-span-6 glass-panel p-6 rounded-2xl border border-slate-800 flex flex-col justify-between space-y-4">
+        <!-- Monthly Comparison Header -->
+        <div class="flex items-center justify-between">
+          <div class="flex items-center space-x-2">
+            <div class="p-2 rounded-xl bg-purple-500/10 text-purple-400">
+              <i data-lucide="scale" class="w-4 h-4"></i>
+            </div>
+            <div>
+              <h3 class="text-base font-semibold text-white">Monthly Spend Comparison</h3>
+              <p class="text-xs text-slate-400">Current-month vs. previous-month spend variance</p>
+            </div>
+          </div>
+          <span id="comparisonBadge" class="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-slate-800 text-slate-300">
+            Analyzing...
+          </span>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3 text-xs bg-slate-900/60 p-3.5 rounded-xl border border-slate-800">
+          <div>
+            <span class="text-slate-400 block text-[11px]" id="currentMonthNameLabel">Current Month</span>
+            <span id="currentMonthSpendLabel" class="text-base font-bold text-white font-mono">$0.00</span>
+          </div>
+          <div>
+            <span class="text-slate-400 block text-[11px]" id="previousMonthNameLabel">Previous Month</span>
+            <span id="previousMonthSpendLabel" class="text-base font-bold text-slate-400 font-mono">$0.00</span>
+          </div>
+        </div>
+
+        <!-- Interactive Savings Calculator -->
+        <div class="border-t border-slate-800/80 pt-3">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-xs font-semibold text-emerald-400 flex items-center gap-1.5">
+              <i data-lucide="calculator" class="w-3.5 h-3.5"></i>
+              Interactive Savings Reduction Simulator
+            </span>
+            <span class="text-[11px] text-slate-500">Pick Target:</span>
+          </div>
+
+          <div class="flex items-center space-x-2 text-xs">
+            <button class="calc-btn px-3 py-1 rounded-md font-semibold bg-emerald-600 text-white transition" data-pct="10">10% Cut</button>
+            <button class="calc-btn px-3 py-1 rounded-md font-semibold bg-slate-800 text-slate-300 hover:text-white transition" data-pct="15">15% Cut</button>
+            <button class="calc-btn px-3 py-1 rounded-md font-semibold bg-slate-800 text-slate-300 hover:text-white transition" data-pct="20">20% Cut</button>
+            
+            <div class="flex items-center space-x-1 ml-auto">
+              <input type="number" id="calcCustomInput" min="1" max="90" placeholder="Custom %" class="w-20 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white text-xs font-mono">
+              <button id="calcCustomBtn" class="bg-slate-700 hover:bg-slate-600 text-white px-2 py-1 rounded text-xs font-medium">Calc</button>
+            </div>
+          </div>
+
+          <div class="mt-2.5 p-2 rounded-lg bg-emerald-950/20 border border-emerald-500/20 flex justify-between items-center text-xs font-mono">
+            <div>
+              <span class="text-slate-400 text-[10px] block">Est. Monthly Savings:</span>
+              <span id="calcMonthlySavingsLabel" class="text-emerald-400 font-bold">$0.00</span>
+            </div>
+            <div>
+              <span class="text-slate-400 text-[10px] block">Annualized Savings:</span>
+              <span id="calcAnnualSavingsLabel" class="text-emerald-300 font-bold">$0.00</span>
+            </div>
+            <div>
+              <span class="text-slate-400 text-[10px] block">Projected Net Spend:</span>
+              <span id="calcNetSpendLabel" class="text-slate-200 font-bold">$0.00</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- 4. Primary Charts: Daily Spend Area Chart & Provider Donut -->
+    <section class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
       <!-- Daily Spend Trend Area Chart (8 Columns) -->
       <div class="lg:col-span-8 glass-panel p-6 rounded-2xl border border-slate-800 flex flex-col justify-between">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
           <div>
             <h3 class="text-base font-semibold text-white">Daily Multi-Cloud Spend Velocity</h3>
-            <p class="text-xs text-slate-400 mt-0.5">Historical burn curve across AWS, GCP, and Azure</p>
+            <p class="text-xs text-slate-400 mt-0.5">Historical burn curve across AWS, GCP, and Azure workloads</p>
           </div>
           <!-- Date Filter Controls -->
-          <div class="inline-flex rounded-lg bg-slate-900 p-1 border border-slate-800 self-start sm:self-auto">
-            <button class="trend-filter-btn px-3 py-1 text-xs font-medium rounded-md text-slate-300 hover:text-white transition" data-range="30d">30d</button>
-            <button class="trend-filter-btn px-3 py-1 text-xs font-medium rounded-md text-slate-300 hover:text-white transition" data-range="60d">60d</button>
-            <button class="trend-filter-btn px-3 py-1 text-xs font-medium rounded-md text-slate-300 hover:text-white transition" data-range="90d">90d</button>
-            <button class="trend-filter-btn px-3 py-1 text-xs font-medium rounded-md bg-blue-600 text-white font-semibold transition" data-range="180d">180d</button>
+          <div class="inline-flex rounded-lg bg-slate-900 p-1 border border-slate-800 self-start sm:self-auto text-xs">
+            <button class="trend-filter-btn px-3 py-1 font-medium rounded-md text-slate-300 hover:text-white transition" data-range="30d">30d</button>
+            <button class="trend-filter-btn px-3 py-1 font-medium rounded-md text-slate-300 hover:text-white transition" data-range="60d">60d</button>
+            <button class="trend-filter-btn px-3 py-1 font-medium rounded-md text-slate-300 hover:text-white transition" data-range="90d">90d</button>
+            <button class="trend-filter-btn px-3 py-1 font-medium rounded-md bg-blue-600 text-white font-semibold transition" data-range="180d">180d</button>
           </div>
         </div>
 
@@ -219,32 +371,50 @@
       </div>
     </section>
 
-    <!-- 3. Secondary Row: Top 6 Cost-Driving Services & Category Progress Bars -->
+    <!-- 5. Secondary Row: Top 5 Costly Services & Category Breakdown -->
     <section class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-      
-      <!-- Top 6 Services Horizontal Bar Chart (6 Columns) -->
-      <div class="lg:col-span-6 glass-panel p-6 rounded-2xl border border-slate-800">
-        <div class="flex items-center justify-between mb-4">
+
+      <!-- Top 5 Costly Services with Search and Sorting (7 Columns) -->
+      <div class="lg:col-span-7 glass-panel p-6 rounded-2xl border border-slate-800 space-y-4">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <h3 class="text-base font-semibold text-white">Top 6 Cost-Driving Services</h3>
-            <p class="text-xs text-slate-400 mt-0.5">Highest expenditure cloud resources</p>
+            <h3 class="text-base font-semibold text-white flex items-center gap-2">
+              <i data-lucide="award" class="w-4 h-4 text-amber-400"></i>
+              Top 5 Costliest Cloud Services
+            </h3>
+            <p class="text-xs text-slate-400 mt-0.5">Highest expenditure resources with search and sorting</p>
           </div>
-          <span class="text-xs text-slate-500 font-mono">Ranked by Total Spend</span>
+
+          <!-- Search & Sort Controls -->
+          <div class="flex items-center space-x-2 text-xs">
+            <div class="relative">
+              <input type="text" id="topServicesSearchInput" placeholder="Search service..." class="bg-slate-900 border border-slate-700 rounded-lg pl-7 pr-2.5 py-1 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 w-36 sm:w-44">
+              <i data-lucide="search" class="w-3.5 h-3.5 text-slate-500 absolute left-2 top-2"></i>
+            </div>
+
+            <select id="topServicesSortSelect" class="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-slate-300 focus:outline-none focus:border-blue-500">
+              <option value="cost_desc">Cost: High to Low</option>
+              <option value="cost_asc">Cost: Low to High</option>
+              <option value="name_asc">Name: A to Z</option>
+              <option value="name_desc">Name: Z to A</option>
+            </select>
+          </div>
         </div>
 
-        <div class="h-64 relative">
-          <canvas id="servicesBarChart"></canvas>
+        <!-- Top 5 Services List Container -->
+        <div id="topServicesListContainer" class="space-y-2.5">
+          <!-- Populated via JS -->
         </div>
       </div>
 
-      <!-- Category Progress Bars (6 Columns) -->
-      <div class="lg:col-span-6 glass-panel p-6 rounded-2xl border border-slate-800 flex flex-col justify-between">
+      <!-- Category Progress Bars (5 Columns) -->
+      <div class="lg:col-span-5 glass-panel p-6 rounded-2xl border border-slate-800 flex flex-col justify-between">
         <div class="flex items-center justify-between mb-4">
           <div>
-            <h3 class="text-base font-semibold text-white">Category Spend Breakdown</h3>
+            <h3 class="text-base font-semibold text-white">Category Spend Distribution</h3>
             <p class="text-xs text-slate-400 mt-0.5">Budget utilization by architecture tier</p>
           </div>
-          <span class="text-xs text-slate-500 font-mono">5 Architecture Domains</span>
+          <span class="text-xs text-slate-500 font-mono">5 Domains</span>
         </div>
 
         <div id="categoryBarsContainer" class="space-y-4 my-auto">
@@ -253,7 +423,59 @@
       </div>
     </section>
 
-    <!-- 4. Anomaly Detection Center -->
+    <!-- 6. Billing Record Management Table (CRUD) -->
+    <section class="glass-panel p-6 rounded-2xl border border-slate-800 space-y-4">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h3 class="text-base font-bold text-white flex items-center gap-2">
+            <i data-lucide="table" class="w-4 h-4 text-blue-400"></i>
+            Billing Records Management
+          </h3>
+          <p class="text-xs text-slate-400 mt-0.5">Inspect, search, edit, or delete individual telemetry line items with input validation</p>
+        </div>
+
+        <div class="flex items-center space-x-2 text-xs">
+          <input type="text" id="recordsSearchInput" placeholder="Search service/resource..." class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 w-44">
+          <button id="addRecordTableBtn" class="bg-blue-600 hover:bg-blue-500 text-white font-medium px-3 py-1.5 rounded-lg transition flex items-center space-x-1">
+            <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+            <span>Add Record</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Records Table Container -->
+      <div class="overflow-x-auto rounded-xl border border-slate-800">
+        <table class="w-full text-left text-xs">
+          <thead class="bg-slate-900/80 text-slate-400 uppercase tracking-wider font-semibold border-b border-slate-800">
+            <tr>
+              <th class="py-3 px-4">Date</th>
+              <th class="py-3 px-4">Provider</th>
+              <th class="py-3 px-4">Service</th>
+              <th class="py-3 px-4">Category</th>
+              <th class="py-3 px-4">Region</th>
+              <th class="py-3 px-4 font-mono">Cost (USD)</th>
+              <th class="py-3 px-4">Usage</th>
+              <th class="py-3 px-4 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="billingRecordsTbody" class="divide-y divide-slate-800/60 text-slate-300">
+            <!-- Populated via JS -->
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Pagination Controls -->
+      <div class="flex items-center justify-between text-xs text-slate-400 pt-2">
+        <span id="recordsPaginationInfo">Showing page 1</span>
+        <div class="flex items-center space-x-1.5">
+          <button id="prevPageBtn" class="px-3 py-1 rounded bg-slate-800 hover:bg-slate-700 text-white disabled:opacity-40 disabled:cursor-not-allowed">Previous</button>
+          <span id="currentPageBadge" class="px-2.5 py-1 rounded bg-slate-900 border border-slate-800 font-mono text-white">1</span>
+          <button id="nextPageBtn" class="px-3 py-1 rounded bg-slate-800 hover:bg-slate-700 text-white disabled:opacity-40 disabled:cursor-not-allowed">Next</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 7. Anomaly Detection Center -->
     <section class="glass-panel p-6 rounded-2xl border border-slate-800 space-y-5">
       <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
@@ -291,7 +513,7 @@
       </div>
     </section>
 
-    <!-- 5. Cost Optimization & Action Hub -->
+    <!-- 8. Cost Optimization & Action Hub -->
     <section class="glass-panel p-6 rounded-2xl border border-slate-800 space-y-5">
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <div>
@@ -320,13 +542,13 @@
 
   </main>
 
-  <!-- Ingestion Modal -->
+  <!-- Ingestion / Add Record Modal -->
   <div id="ingestModal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
     <div class="bg-[#111827] border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl relative space-y-4">
       <div class="flex items-center justify-between border-b border-slate-800 pb-3">
         <h3 class="text-base font-bold text-white flex items-center gap-2">
           <i data-lucide="cloud-upload" class="w-5 h-5 text-blue-400"></i>
-          Ingest Cloud Billing Record
+          Add Cloud Billing Record
         </h3>
         <button id="closeIngestModalBtn" class="text-slate-400 hover:text-white">
           <i data-lucide="x" class="w-5 h-5"></i>
@@ -336,11 +558,11 @@
       <form id="ingestForm" class="space-y-4 text-xs">
         <div class="grid grid-cols-2 gap-3">
           <div>
-            <label class="block text-slate-400 mb-1">Billing Date</label>
-            <input type="date" id="ingestDate" required class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500">
+            <label class="block text-slate-400 mb-1">Billing Date <span class="text-rose-400">*</span></label>
+            <input type="date" id="ingestDate" required class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500 font-mono">
           </div>
           <div>
-            <label class="block text-slate-400 mb-1">Cloud Provider</label>
+            <label class="block text-slate-400 mb-1">Cloud Provider <span class="text-rose-400">*</span></label>
             <select id="ingestProvider" required class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500">
               <option value="AWS">AWS</option>
               <option value="GCP">GCP</option>
@@ -351,11 +573,11 @@
 
         <div class="grid grid-cols-2 gap-3">
           <div>
-            <label class="block text-slate-400 mb-1">Cloud Service</label>
+            <label class="block text-slate-400 mb-1">Cloud Service <span class="text-rose-400">*</span></label>
             <input type="text" id="ingestService" placeholder="e.g. EC2, BigQuery" required class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500">
           </div>
           <div>
-            <label class="block text-slate-400 mb-1">Category</label>
+            <label class="block text-slate-400 mb-1">Category <span class="text-rose-400">*</span></label>
             <select id="ingestCategory" required class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500">
               <option value="Compute">Compute</option>
               <option value="Storage">Storage</option>
@@ -369,36 +591,167 @@
         <div class="grid grid-cols-2 gap-3">
           <div>
             <label class="block text-slate-400 mb-1">Region</label>
-            <input type="text" id="ingestRegion" placeholder="e.g. us-east-1, eastus" required class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500">
+            <input type="text" id="ingestRegion" placeholder="e.g. us-east-1, eastus" value="us-east-1" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500">
           </div>
           <div>
-            <label class="block text-slate-400 mb-1">Incurred Cost (USD $)</label>
-            <input type="number" step="0.01" id="ingestCost" placeholder="125.50" required class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500 font-mono">
+            <label class="block text-slate-400 mb-1">Incurred Cost (USD $) <span class="text-rose-400">*</span></label>
+            <input type="number" step="0.01" min="0.01" id="ingestCost" placeholder="125.50" required class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500 font-mono">
           </div>
         </div>
 
         <div class="grid grid-cols-2 gap-3">
           <div>
             <label class="block text-slate-400 mb-1">Usage Amount</label>
-            <input type="number" step="0.01" id="ingestUsage" placeholder="720" required class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500 font-mono">
+            <input type="number" step="0.01" min="0" id="ingestUsage" placeholder="720" value="720" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500 font-mono">
           </div>
           <div>
             <label class="block text-slate-400 mb-1">Usage Unit</label>
-            <input type="text" id="ingestUnit" placeholder="Hrs, GB, Queries" required class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500">
+            <input type="text" id="ingestUnit" placeholder="Hrs, GB, Queries" value="Hrs" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500">
           </div>
         </div>
 
         <div>
-          <label class="block text-slate-400 mb-1">Cloud Resource Identifier</label>
-          <input type="text" id="ingestResourceId" placeholder="e.g. i-087fb23c9a12, arn:aws:s3:::bucket" required class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500 font-mono">
+          <label class="block text-slate-400 mb-1">Resource ID</label>
+          <input type="text" id="ingestResourceId" placeholder="e.g. i-087fb23c9a12, arn:aws:s3:::bucket" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500 font-mono">
         </div>
 
         <div class="pt-2 flex justify-end space-x-2">
           <button type="button" id="cancelIngestBtn" class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300">Cancel</button>
           <button type="submit" class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold flex items-center space-x-1.5">
             <i data-lucide="check" class="w-4 h-4"></i>
-            <span>Commit Record to DB</span>
+            <span>Save to Database</span>
           </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Edit Record Modal -->
+  <div id="editRecordModal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-[#111827] border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl relative space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <h3 class="text-base font-bold text-white flex items-center gap-2">
+          <i data-lucide="edit-3" class="w-5 h-5 text-amber-400"></i>
+          Edit Billing Record #<span id="editRecordIdDisplay"></span>
+        </h3>
+        <button id="closeEditModalBtn" class="text-slate-400 hover:text-white">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <form id="editRecordForm" class="space-y-4 text-xs">
+        <input type="hidden" id="editRecordId">
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-slate-400 mb-1">Date</label>
+            <input type="date" id="editRecordDate" required class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500 font-mono">
+          </div>
+          <div>
+            <label class="block text-slate-400 mb-1">Provider</label>
+            <select id="editRecordProvider" required class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500">
+              <option value="AWS">AWS</option>
+              <option value="GCP">GCP</option>
+              <option value="Azure">Azure</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-slate-400 mb-1">Service</label>
+            <input type="text" id="editRecordService" required class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500">
+          </div>
+          <div>
+            <label class="block text-slate-400 mb-1">Category</label>
+            <select id="editRecordCategory" required class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500">
+              <option value="Compute">Compute</option>
+              <option value="Storage">Storage</option>
+              <option value="Database">Database</option>
+              <option value="Networking">Networking</option>
+              <option value="Serverless">Serverless</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-slate-400 mb-1">Region</label>
+            <input type="text" id="editRecordRegion" required class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500">
+          </div>
+          <div>
+            <label class="block text-slate-400 mb-1">Cost (USD $)</label>
+            <input type="number" step="0.01" min="0" id="editRecordCost" required class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500 font-mono">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-slate-400 mb-1">Usage Amount</label>
+            <input type="number" step="0.01" min="0" id="editRecordUsage" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500 font-mono">
+          </div>
+          <div>
+            <label class="block text-slate-400 mb-1">Usage Unit</label>
+            <input type="text" id="editRecordUnit" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500">
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-slate-400 mb-1">Resource ID</label>
+          <input type="text" id="editRecordResource" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500 font-mono">
+        </div>
+
+        <div class="pt-2 flex justify-end space-x-2">
+          <button type="button" id="cancelEditModalBtn" class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300">Cancel</button>
+          <button type="submit" class="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-semibold">Update Record</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Delete Confirmation Modal -->
+  <div id="deleteConfirmModal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-[#111827] border border-slate-800 rounded-2xl max-w-sm w-full p-6 shadow-2xl text-center space-y-4">
+      <div class="w-12 h-12 rounded-full bg-rose-500/20 text-rose-400 flex items-center justify-center mx-auto">
+        <i data-lucide="alert-triangle" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <h4 class="text-base font-bold text-white">Delete Billing Record?</h4>
+        <p class="text-xs text-slate-400 mt-1">Are you sure you want to delete record #<span id="deleteRecordIdDisplay"></span>? This action cannot be undone.</p>
+      </div>
+      <div class="flex items-center justify-center space-x-3 pt-2">
+        <button id="cancelDeleteBtn" class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold">Cancel</button>
+        <button id="confirmDeleteBtn" class="px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold">Yes, Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Set Monthly Budget Modal -->
+  <div id="budgetModal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-[#111827] border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <h3 class="text-base font-bold text-white flex items-center gap-2">
+          <i data-lucide="wallet" class="w-5 h-5 text-amber-400"></i>
+          Configure Monthly Budget Limit
+        </h3>
+        <button id="closeBudgetModalBtn" class="text-slate-400 hover:text-white">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <form id="budgetForm" class="space-y-4 text-xs">
+        <div>
+          <label class="block text-slate-400 mb-1">Target Month</label>
+          <input type="text" id="budgetMonthInput" readonly class="w-full bg-slate-900/60 border border-slate-800 rounded-lg px-3 py-2 text-slate-400 font-mono">
+        </div>
+        <div>
+          <label class="block text-slate-400 mb-1">Monthly Budget Limit (USD $) <span class="text-rose-400">*</span></label>
+          <input type="number" step="1000" min="100" id="budgetAmountInput" required placeholder="65000" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500 font-mono text-sm">
+        </div>
+        <p class="text-[11px] text-slate-400">The platform will display visual alerts when spend exceeds 80% and 100% of this limit.</p>
+
+        <div class="pt-2 flex justify-end space-x-2">
+          <button type="button" id="cancelBudgetBtn" class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300">Cancel</button>
+          <button type="submit" class="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-semibold">Save Budget</button>
         </div>
       </form>
     </div>
@@ -410,8 +763,8 @@
   <!-- Footer -->
   <footer class="border-t border-slate-800/80 bg-[#0F172A]/40 mt-12 py-6 text-center text-xs text-slate-500">
     <div class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
-      <p>Cloud Cost Optimization & FinOps Analytics Platform &middot; Powered by Node.js v22 built-in SQLite engine</p>
-      <p class="font-mono text-slate-400">Zero External Database Dependencies &middot; Full Real-Time Sync</p>
+      <p>Cloud Cost Optimization & FinOps Analytics Platform &middot; B.Tech Final Year Project</p>
+      <p class="font-mono text-slate-400">Node.js v22 Built-in SQLite Engine &middot; Real-Time Telemetry Synchronization</p>
     </div>
   </footer>
 

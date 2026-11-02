@@ -44,7 +44,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// CORS Headers for API flexibility
+// CORS Headers
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
@@ -54,6 +54,18 @@ app.use((req, res, next) => {
   }
   next();
 });
+
+// Helper for extracting query filters
+function extractFilters(query) {
+  return {
+    month: query.month && query.month !== 'all' ? query.month : null,
+    startDate: query.startDate || null,
+    endDate: query.endDate || null,
+    provider: query.provider || 'all',
+    search: query.search || '',
+    sortBy: query.sortBy || 'cost_desc'
+  };
+}
 
 // --- API Endpoints ---
 
@@ -70,17 +82,75 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// 2. Executive FinOps KPIs
+// 2. Available Months
+app.get('/api/months', (req, res) => {
+  try {
+    const months = db.getAvailableMonths();
+    res.json({ success: true, data: months });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 3. Executive FinOps KPIs (Supports Date & Provider Filters)
 app.get('/api/kpi', (req, res) => {
   try {
-    const kpis = db.getKPIs();
+    const filters = extractFilters(req.query);
+    const kpis = db.getKPIs(filters);
     res.json({ success: true, data: kpis });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-// 3. Daily Spend Trend Area Chart
+// 4. Monthly Cost Comparison
+app.get('/api/comparison', (req, res) => {
+  try {
+    const comparison = db.getMonthlyComparison();
+    res.json({ success: true, data: comparison });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 5. Budget Management
+app.get('/api/budget', (req, res) => {
+  try {
+    const month = req.query.month || null;
+    const status = db.getBudgetStatus(month);
+    res.json({ success: true, data: status });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/budget', (req, res) => {
+  try {
+    const { month, amount } = req.body;
+    if (amount === undefined || isNaN(parseFloat(amount)) || parseFloat(amount) < 0) {
+      return res.status(400).json({ success: false, error: 'Budget amount must be a non-negative number.' });
+    }
+    const targetMonth = month || db.getLatestMonth() || new Date().toISOString().slice(0, 7);
+    const updated = db.setBudget(targetMonth, parseFloat(amount));
+    res.json({ success: true, message: `Budget for ${targetMonth} updated successfully.`, data: updated });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 6. Savings Calculator (10%, 15%, 20% or custom)
+app.get('/api/calculator', (req, res) => {
+  try {
+    const percentage = parseFloat(req.query.reduction || '10');
+    const month = req.query.month || null;
+    const calculation = db.calculateSavings(percentage, month);
+    res.json({ success: true, data: calculation });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 7. Daily Spend Trend Area Chart
 app.get('/api/trends', (req, res) => {
   try {
     let days = 30;
@@ -90,45 +160,160 @@ app.get('/api/trends', (req, res) => {
     else if (range === '180d') days = 180;
     else if (!isNaN(parseInt(range))) days = parseInt(range);
 
-    const trends = db.getDailyTrends(days);
+    const filters = extractFilters(req.query);
+    const trends = db.getDailyTrends(days, filters);
     res.json({ success: true, range: `${days}d`, count: trends.length, data: trends });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-// 4. Provider Spend Split (Donut Chart)
+// 8. Provider Spend Split (Donut Chart)
 app.get('/api/breakdown/provider', (req, res) => {
   try {
-    const data = db.getProviderBreakdown();
+    const filters = extractFilters(req.query);
+    const data = db.getProviderBreakdown(filters);
     res.json({ success: true, data });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-// 5. Top Cost-Driving Services (Horizontal Bar Chart)
+// 9. Top 5 Costly Services (With Search and Sorting)
 app.get('/api/breakdown/services', (req, res) => {
   try {
-    const limit = parseInt(req.query.limit) || 6;
-    const data = db.getTopServices(limit);
+    const limit = parseInt(req.query.limit) || 5;
+    const filters = extractFilters(req.query);
+    const data = db.getTopServices(limit, filters);
     res.json({ success: true, limit, data });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-// 6. Category Breakdown (Progress Bars)
+// 10. Category Breakdown (Progress Bars)
 app.get('/api/breakdown/categories', (req, res) => {
   try {
-    const data = db.getCategoryBreakdown();
+    const filters = extractFilters(req.query);
+    const data = db.getCategoryBreakdown(filters);
     res.json({ success: true, data });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-// 7. Anomaly Detection Center
+// 11. Billing Record Management (CRUD)
+app.get('/api/records', (req, res) => {
+  try {
+    const options = {
+      page: parseInt(req.query.page) || 1,
+      limit: parseInt(req.query.limit) || 10,
+      search: req.query.search || '',
+      sortBy: req.query.sortBy || 'date_desc',
+      month: req.query.month || null,
+      startDate: req.query.startDate || null,
+      endDate: req.query.endDate || null,
+      provider: req.query.provider || 'all',
+      category: req.query.category || 'all'
+    };
+    const result = db.getBillingRecords(options);
+    res.json({ success: true, ...result });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/records/:id', (req, res) => {
+  try {
+    const record = db.getRecordById(parseInt(req.params.id));
+    if (!record) return res.status(404).json({ success: false, error: 'Record not found.' });
+    res.json({ success: true, data: record });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/records', (req, res) => {
+  try {
+    const { date, provider, service, category, region, cost, usage_amount, usage_unit, resource_id } = req.body;
+    
+    // Strict input validation
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return res.status(400).json({ success: false, error: 'Valid billing date (YYYY-MM-DD) is required.' });
+    }
+    if (!provider || !['AWS', 'GCP', 'Azure'].includes(provider)) {
+      return res.status(400).json({ success: false, error: 'Provider must be AWS, GCP, or Azure.' });
+    }
+    if (!service || service.trim().length === 0) {
+      return res.status(400).json({ success: false, error: 'Service name is required.' });
+    }
+    if (!category || category.trim().length === 0) {
+      return res.status(400).json({ success: false, error: 'Category is required.' });
+    }
+    if (cost === undefined || isNaN(parseFloat(cost)) || parseFloat(cost) < 0) {
+      return res.status(400).json({ success: false, error: 'Cost must be a positive number.' });
+    }
+
+    const record = {
+      date,
+      provider,
+      service: service.trim(),
+      category: category.trim(),
+      region: (region || 'us-east-1').trim(),
+      cost: parseFloat(cost),
+      usage_amount: parseFloat(usage_amount || 0),
+      usage_unit: (usage_unit || 'Units').trim(),
+      resource_id: (resource_id || `res-${Date.now()}`).trim(),
+      tags: { source: 'manual-entry' }
+    };
+
+    db.insertBillingRecord(record);
+    const kpis = db.getKPIs();
+    res.status(201).json({ success: true, message: 'Billing record created successfully.', record, kpis });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.put('/api/records/:id', (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const { date, provider, service, category, region, cost, usage_amount, usage_unit, resource_id } = req.body;
+
+    if (cost !== undefined && (isNaN(parseFloat(cost)) || parseFloat(cost) < 0)) {
+      return res.status(400).json({ success: false, error: 'Cost must be a positive number.' });
+    }
+    if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return res.status(400).json({ success: false, error: 'Valid date (YYYY-MM-DD) required.' });
+    }
+
+    const updated = db.updateBillingRecord(id, req.body);
+    if (!updated) {
+      return res.status(404).json({ success: false, error: 'Record not found.' });
+    }
+
+    const kpis = db.getKPIs();
+    res.json({ success: true, message: `Record #${id} updated successfully.`, data: updated, kpis });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.delete('/api/records/:id', (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const deleted = db.deleteBillingRecord(id);
+    if (!deleted) {
+      return res.status(404).json({ success: false, error: 'Record not found.' });
+    }
+    const kpis = db.getKPIs();
+    res.json({ success: true, message: `Record #${id} deleted successfully.`, kpis });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 12. Anomaly Detection Center
 app.get('/api/anomalies', (req, res) => {
   try {
     const status = req.query.status || 'all';
@@ -139,7 +324,6 @@ app.get('/api/anomalies', (req, res) => {
   }
 });
 
-// Toggle Anomaly Status (Resolved / Reopen)
 app.post('/api/anomalies/:id/toggle', (req, res) => {
   try {
     const id = parseInt(req.params.id);
@@ -159,13 +343,11 @@ app.post('/api/anomalies/:id/toggle', (req, res) => {
   }
 });
 
-// Run Statistical Anomaly Scanner
 app.post('/api/anomalies/scan', (req, res) => {
   try {
     const detected = db.runStatisticalAnomalyDetection();
     let newInserted = 0;
     for (const anom of detected) {
-      // Check if already in anomalies table for same date and service
       const existing = db.db.prepare('SELECT id FROM anomalies WHERE date = ? AND service = ?').get(anom.date, anom.service);
       if (!existing) {
         db.insertAnomaly(anom);
@@ -185,7 +367,7 @@ app.post('/api/anomalies/scan', (req, res) => {
   }
 });
 
-// 8. Cost Optimization Recommendations
+// 13. Recommendations
 app.get('/api/recommendations', (req, res) => {
   try {
     const recommendations = db.getRecommendations();
@@ -195,7 +377,6 @@ app.get('/api/recommendations', (req, res) => {
   }
 });
 
-// Apply or Rollback Recommendation (Real-time ROI recalculation)
 app.post('/api/recommendations/:id/apply', (req, res) => {
   try {
     const id = parseInt(req.params.id);
@@ -217,40 +398,12 @@ app.post('/api/recommendations/:id/apply', (req, res) => {
   }
 });
 
-// 9. Multi-Cloud Ingestion API
-app.post('/api/ingest', (req, res) => {
-  try {
-    const { date, provider, service, category, region, cost, usage_amount, usage_unit, resource_id, tags } = req.body;
-    if (!date || !provider || !service || !category || !region || cost === undefined) {
-      return res.status(400).json({ success: false, error: 'Missing required billing record fields' });
-    }
-
-    const record = {
-      date,
-      provider,
-      service,
-      category,
-      region,
-      cost: parseFloat(cost),
-      usage_amount: parseFloat(usage_amount || 0),
-      usage_unit: usage_unit || 'Units',
-      resource_id: resource_id || `custom-${Date.now()}`,
-      tags: tags || {}
-    };
-
-    db.insertBillingRecord(record);
-    const kpis = db.getKPIs();
-    res.status(201).json({ success: true, message: 'Record ingested successfully', record, kpis });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// 10. Export Hub: CSV Download
+// 14. Export Hub: Filtered CSV Download
 app.get('/api/export/csv', (req, res) => {
   try {
-    const records = db.getAllRecords(20000);
-    const headers = ['id', 'date', 'provider', 'service', 'category', 'region', 'cost', 'usage_amount', 'usage_unit', 'resource_id', 'tags'];
+    const filters = extractFilters(req.query);
+    const records = db.getAllRecords(20000, filters);
+    const headers = ['id', 'date', 'provider', 'service', 'category', 'region', 'cost_usd', 'usage_amount', 'usage_unit', 'resource_id', 'tags'];
     
     let csvContent = headers.join(',') + '\n';
     for (const r of records) {
@@ -270,7 +423,7 @@ app.get('/api/export/csv', (req, res) => {
       csvContent += row.join(',') + '\n';
     }
 
-    const filename = `finops-cloud-costs-audit-${new Date().toISOString().split('T')[0]}.csv`;
+    const filename = `finops-billing-audit-${new Date().toISOString().split('T')[0]}.csv`;
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.status(200).send(csvContent);
@@ -279,26 +432,31 @@ app.get('/api/export/csv', (req, res) => {
   }
 });
 
-// 11. Export Hub: JSON Download
+// 15. Export Hub: JSON Download
 app.get('/api/export/json', (req, res) => {
   try {
-    const kpis = db.getKPIs();
-    const providers = db.getProviderBreakdown();
-    const services = db.getTopServices(10);
-    const categories = db.getCategoryBreakdown();
+    const filters = extractFilters(req.query);
+    const kpis = db.getKPIs(filters);
+    const providers = db.getProviderBreakdown(filters);
+    const services = db.getTopServices(10, filters);
+    const categories = db.getCategoryBreakdown(filters);
     const anomalies = db.getAnomalies('all');
     const recommendations = db.getRecommendations();
     const dateRange = db.getDateRange();
+    const budgetStatus = db.getBudgetStatus();
+    const monthlyComparison = db.getMonthlyComparison();
 
     const report = {
       meta: {
         platform: 'Cloud Cost Optimization & FinOps Analytics Platform',
-        version: '1.0.0',
+        version: '2.0.0',
         exportedAt: new Date().toISOString(),
         dateRange,
         engine: 'Node.js v22 built-in SQLite engine'
       },
       executiveSummaryKPIs: kpis,
+      budgetStatus,
+      monthlyComparison,
       multiCloudBreakdown: {
         byProvider: providers,
         byCategory: categories,
@@ -318,6 +476,167 @@ app.get('/api/export/json', (req, res) => {
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.status(200).send(JSON.stringify(report, null, 2));
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 16. Printable Executive PDF Report View
+app.get('/api/export/report', (req, res) => {
+  try {
+    const kpis = db.getKPIs();
+    const budget = db.getBudgetStatus();
+    const comparison = db.getMonthlyComparison();
+    const topServices = db.getTopServices(5);
+    const anomalies = db.getAnomalies('open');
+    const recommendations = db.getRecommendations();
+
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>FinOps Cloud Cost Optimization Audit Report</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 40px; color: #1e293b; background: #fff; }
+    .header { border-bottom: 2px solid #3b82f6; padding-bottom: 16px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: flex-end; }
+    h1 { margin: 0; font-size: 24px; color: #0f172a; }
+    .subtitle { color: #64748b; font-size: 13px; margin-top: 4px; }
+    .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+    .kpi-card { border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px; background: #f8fafc; }
+    .kpi-label { font-size: 11px; text-transform: uppercase; color: #64748b; font-weight: 600; }
+    .kpi-value { font-size: 20px; font-weight: 700; color: #0f172a; margin-top: 6px; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 24px; font-size: 12px; }
+    th, td { border: 1px solid #e2e8f0; padding: 8px 12px; text-align: left; }
+    th { background: #f1f5f9; color: #475569; font-weight: 600; }
+    .badge { padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 600; }
+    .badge-aws { background: #fef3c7; color: #b45309; }
+    .badge-gcp { background: #dbeafe; color: #1d4ed8; }
+    .badge-azure { background: #e0f2fe; color: #0369a1; }
+    .badge-alert { background: #fee2e2; color: #b91c1c; }
+    .footer { margin-top: 40px; border-top: 1px solid #e2e8f0; padding-top: 12px; font-size: 11px; color: #94a3b8; display: flex; justify-content: space-between; }
+    @media print {
+      body { margin: 20px; }
+      .no-print { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="no-print" style="margin-bottom: 20px; display: flex; justify-content: flex-end; gap: 10px;">
+    <button onclick="window.print()" style="background: #2563eb; color: #fff; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: 600;">Print / Save as PDF</button>
+  </div>
+  <div class="header">
+    <div>
+      <h1>FinOps Cloud Cost Optimization Report</h1>
+      <div class="subtitle">Multi-Cloud Observability & Governance Audit (AWS · GCP · Azure)</div>
+    </div>
+    <div style="text-align: right; font-size: 12px; color: #64748b;">
+      Generated: ${new Date().toLocaleDateString()}<br>
+      System: Node.js v22 Built-in SQLite
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="kpi-card">
+      <div class="kpi-label">Total Spend (Recorded)</div>
+      <div class="kpi-value">$${kpis.totalSpend.toLocaleString(undefined, {minimumFractionDigits: 2})}</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Daily Burn Velocity</div>
+      <div class="kpi-value">$${kpis.dailyBurnRate.toLocaleString(undefined, {minimumFractionDigits: 2})}/day</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Monthly Budget Status</div>
+      <div class="kpi-value">${budget.utilizationPct}% <span style="font-size: 12px; font-weight: normal; color: #64748b;">($${budget.currentSpend.toLocaleString()} / $${budget.budgetAmount.toLocaleString()})</span></div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Monthly Trend (${comparison ? comparison.currentMonth : ''})</div>
+      <div class="kpi-value" style="color: ${comparison && comparison.isIncrease ? '#dc2626' : '#16a34a'}">
+        ${comparison ? comparison.summaryText : 'N/A'}
+      </div>
+    </div>
+  </div>
+
+  <h3 style="font-size: 14px; margin-bottom: 8px;">Top Cost-Driving Cloud Services</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Service</th>
+        <th>Provider</th>
+        <th>Category</th>
+        <th>Total Incurred Cost</th>
+        <th>Avg Daily Cost</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${topServices.map(s => `
+        <tr>
+          <td><strong>${s.service}</strong></td>
+          <td><span class="badge badge-${s.provider.toLowerCase()}">${s.provider}</span></td>
+          <td>${s.category}</td>
+          <td>$${s.totalCost.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+          <td>$${s.avgCost.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+        </tr>
+      `).join('')}
+    </tbody>
+  </table>
+
+  <h3 style="font-size: 14px; margin-bottom: 8px;">Active Spend Anomalies</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Provider & Service</th>
+        <th>Deviation</th>
+        <th>Actual / Expected</th>
+        <th>Root-Cause Diagnostic</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${anomalies.slice(0, 5).map(a => `
+        <tr>
+          <td>${a.date}</td>
+          <td>${a.provider} - ${a.service}</td>
+          <td><span class="badge badge-alert">+${a.deviation_pct}%</span></td>
+          <td>$${a.actual_cost} / $${a.expected_cost}</td>
+          <td>${a.root_cause}</td>
+        </tr>
+      `).join('')}
+    </tbody>
+  </table>
+
+  <h3 style="font-size: 14px; margin-bottom: 8px;">Prioritized Cost Optimization Opportunities</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Recommendation</th>
+        <th>Provider</th>
+        <th>Category</th>
+        <th>Est. Monthly Savings</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${recommendations.map(r => `
+        <tr>
+          <td><strong>${r.title}</strong><br><span style="color: #64748b; font-size: 11px;">${r.description}</span></td>
+          <td>${r.provider}</td>
+          <td>${r.category}</td>
+          <td style="color: #16a34a; font-weight: 600;">+$${r.monthly_savings.toLocaleString(undefined, {minimumFractionDigits: 2})}/mo</td>
+          <td>${r.status === 'applied' ? '<span style="color: #16a34a; font-weight: bold;">Applied</span>' : 'Available'}</td>
+        </tr>
+      `).join('')}
+    </tbody>
+  </table>
+
+  <div class="footer">
+    <div>FinOps Cloud Cost Optimization & Analytics Platform &middot; B.Tech Final Year Project</div>
+    <div>Confidential Audit Report &middot; Generated via High-Performance Local Engine</div>
+  </div>
+</body>
+</html>`;
+
+    res.setHeader('Content-Type', 'text/html');
+    res.send(html);
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

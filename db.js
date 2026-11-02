@@ -61,28 +61,83 @@ class FinOpsDB {
         applied_at TEXT,
         realized_savings REAL DEFAULT 0
       );
+
+      CREATE TABLE IF NOT EXISTS budgets (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        month TEXT NOT NULL UNIQUE,
+        amount REAL NOT NULL,
+        updated_at TEXT
+      );
     `);
+
+    // Ensure default budget exists for current/recent months if empty
+    const budgetCount = this.db.prepare('SELECT COUNT(*) as count FROM budgets').get();
+    if (!budgetCount || budgetCount.count === 0) {
+      const now = new Date();
+      const currentMonth = now.toISOString().slice(0, 7);
+      this.setBudget(currentMonth, 65000);
+      this.setBudget('global', 65000);
+    }
   }
 
-  // --- Billing Records ---
+  // --- Billing Records CRUD ---
   insertBillingRecord(rec) {
     const stmt = this.db.prepare(`
       INSERT INTO billing_records (
         date, provider, service, category, region, cost, usage_amount, usage_unit, resource_id, tags
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
-    return stmt.run(
+    const result = stmt.run(
       rec.date,
       rec.provider,
       rec.service,
       rec.category,
       rec.region,
-      Number(rec.cost.toFixed(2)),
-      Number(rec.usage_amount.toFixed(2)),
-      rec.usage_unit,
-      rec.resource_id,
+      Number(Number(rec.cost).toFixed(2)),
+      Number(Number(rec.usage_amount || 0).toFixed(2)),
+      rec.usage_unit || 'Units',
+      rec.resource_id || `res-${Date.now()}`,
       typeof rec.tags === 'object' ? JSON.stringify(rec.tags) : (rec.tags || '{}')
     );
+    return result;
+  }
+
+  updateBillingRecord(id, rec) {
+    const existing = this.db.prepare('SELECT * FROM billing_records WHERE id = ?').get(id);
+    if (!existing) return null;
+
+    const stmt = this.db.prepare(`
+      UPDATE billing_records
+      SET date = ?, provider = ?, service = ?, category = ?, region = ?, cost = ?, usage_amount = ?, usage_unit = ?, resource_id = ?
+      WHERE id = ?
+    `);
+
+    stmt.run(
+      rec.date || existing.date,
+      rec.provider || existing.provider,
+      rec.service || existing.service,
+      rec.category || existing.category,
+      rec.region || existing.region,
+      rec.cost !== undefined ? Number(Number(rec.cost).toFixed(2)) : existing.cost,
+      rec.usage_amount !== undefined ? Number(Number(rec.usage_amount).toFixed(2)) : existing.usage_amount,
+      rec.usage_unit || existing.usage_unit,
+      rec.resource_id || existing.resource_id,
+      id
+    );
+
+    return this.db.prepare('SELECT * FROM billing_records WHERE id = ?').get(id);
+  }
+
+  deleteBillingRecord(id) {
+    const existing = this.db.prepare('SELECT * FROM billing_records WHERE id = ?').get(id);
+    if (!existing) return false;
+
+    this.db.prepare('DELETE FROM billing_records WHERE id = ?').run(id);
+    return true;
+  }
+
+  getRecordById(id) {
+    return this.db.prepare('SELECT * FROM billing_records WHERE id = ?').get(id);
   }
 
   insertBulkRecords(records) {
@@ -128,30 +183,63 @@ class FinOpsDB {
     };
   }
 
-  // --- Executive Dashboard KPIs ---
-  getKPIs() {
-    const totalRow = this.db.prepare('SELECT SUM(cost) AS totalSpend, COUNT(*) AS count FROM billing_records').get();
+  getAvailableMonths() {
+    const rows = this.db.prepare(`
+      SELECT DISTINCT substr(date, 1, 7) AS month, COUNT(*) as count, ROUND(SUM(cost), 2) as total
+      FROM billing_records
+      GROUP BY month
+      ORDER BY month DESC
+    `).all();
+    return rows;
+  }
+
+  // --- Executive Dashboard KPIs & Monthly Comparison ---
+  getKPIs(filter = {}) {
+    let whereClauses = [];
+    let params = [];
+
+    if (filter.startDate) {
+      whereClauses.push('date >= ?');
+      params.push(filter.startDate);
+    }
+    if (filter.endDate) {
+      whereClauses.push('date <= ?');
+      params.push(filter.endDate);
+    }
+    if (filter.month) {
+      whereClauses.push("substr(date, 1, 7) = ?");
+      params.push(filter.month);
+    }
+    if (filter.provider && filter.provider !== 'all') {
+      whereClauses.push('provider = ?');
+      params.push(filter.provider);
+    }
+
+    const whereSql = whereClauses.length > 0 ? 'WHERE ' + whereClauses.join(' AND ') : '';
+
+    const totalRow = this.db.prepare(`SELECT SUM(cost) AS totalSpend, COUNT(*) AS count FROM billing_records ${whereSql}`).get(...params);
     const totalSpend = totalRow && totalRow.totalSpend ? Number(totalRow.totalSpend.toFixed(2)) : 0;
 
-    // Daily burn rate calculated across last 7 days of recorded data
-    const maxDateRow = this.db.prepare('SELECT MAX(date) AS maxDate FROM billing_records').get();
+    // Daily burn rate
     let dailyBurnRate = 0;
+    const maxDateRow = this.db.prepare(`SELECT MAX(date) AS maxDate FROM billing_records ${whereSql}`).get(...params);
     if (maxDateRow && maxDateRow.maxDate) {
+      const burnParams = [...params, maxDateRow.maxDate];
       const burnRow = this.db.prepare(`
         SELECT AVG(day_total) AS burnRate
         FROM (
           SELECT date, SUM(cost) AS day_total
           FROM billing_records
-          WHERE date >= date(?, '-6 day')
+          ${whereSql ? whereSql + ' AND' : 'WHERE'} date >= date(?, '-6 day')
           GROUP BY date
         )
-      `).get(maxDateRow.maxDate);
+      `).get(...burnParams);
       if (burnRow && burnRow.burnRate) {
         dailyBurnRate = Number(burnRow.burnRate.toFixed(2));
       }
     }
 
-    // Real-Time Savings Tracker (Sum of realized monthly savings from applied recommendations)
+    // Real-time Savings Tracker
     const savingsRow = this.db.prepare(`
       SELECT SUM(realized_savings) AS totalSavings
       FROM recommendations
@@ -159,7 +247,7 @@ class FinOpsDB {
     `).get();
     const realizedMonthlySavings = savingsRow && savingsRow.totalSavings ? Number(savingsRow.totalSavings.toFixed(2)) : 0;
 
-    // 30-Day Cost Projection: (Daily Burn * 30) minus realized monthly savings deduction
+    // 30-Day Cost Projection
     const gross30DayProjection = dailyBurnRate * 30;
     const net30DayProjection = Math.max(0, Number((gross30DayProjection - realizedMonthlySavings).toFixed(2)));
 
@@ -180,27 +268,8 @@ class FinOpsDB {
       FROM recommendations
     `).get();
 
-    // Previous 30-day period vs latest 30-day period comparison for trend badge
-    let periodGrowthPct = 0;
-    if (maxDateRow && maxDateRow.maxDate) {
-      const recent30 = this.db.prepare(`
-        SELECT SUM(cost) AS spend
-        FROM billing_records
-        WHERE date >= date(?, '-29 day')
-      `).get(maxDateRow.maxDate);
-
-      const prior30 = this.db.prepare(`
-        SELECT SUM(cost) AS spend
-        FROM billing_records
-        WHERE date >= date(?, '-59 day') AND date < date(?, '-29 day')
-      `).get(maxDateRow.maxDate, maxDateRow.maxDate);
-
-      const recentSpend = (recent30 && recent30.spend) || 0;
-      const priorSpend = (prior30 && prior30.spend) || 0;
-      if (priorSpend > 0) {
-        periodGrowthPct = Number((((recentSpend - priorSpend) / priorSpend) * 100).toFixed(1));
-      }
-    }
+    // Monthly Cost Comparison (Current vs Previous Month)
+    const monthlyComparison = this.getMonthlyComparison();
 
     return {
       totalSpend,
@@ -208,20 +277,143 @@ class FinOpsDB {
       projected30DaySpend: net30DayProjection,
       gross30DayProjection: Number(gross30DayProjection.toFixed(2)),
       realizedSavings: realizedMonthlySavings,
-      periodGrowthPct,
+      periodGrowthPct: monthlyComparison ? monthlyComparison.percentage : 0,
+      monthlyComparison,
       openAnomalies: (anomalyRow && anomalyRow.openCount) || 0,
       resolvedAnomalies: (anomalyRow && anomalyRow.resolvedCount) || 0,
       totalRecommendations: (recRow && recRow.total) || 0,
       appliedRecommendations: (recRow && recRow.appliedCount) || 0,
-      totalRecords: totalRow ? totalRow.count : 0
+      totalRecords: totalRow ? totalRow.count : 0,
+      activeFilter: filter
     };
   }
 
-  // --- Daily Trends for Area Chart ---
-  getDailyTrends(days = 30) {
-    const maxDateRow = this.db.prepare('SELECT MAX(date) AS maxDate FROM billing_records').get();
-    if (!maxDateRow || !maxDateRow.maxDate) {
-      return [];
+  // --- Monthly Cost Comparison ---
+  getMonthlyComparison() {
+    const rows = this.db.prepare(`
+      SELECT substr(date, 1, 7) AS ym, ROUND(SUM(cost), 2) AS total, COUNT(*) as records
+      FROM billing_records
+      GROUP BY ym
+      ORDER BY ym DESC
+      LIMIT 2
+    `).all();
+
+    if (!rows || rows.length === 0) return null;
+
+    const current = rows[0];
+    const previous = rows[1] || { ym: 'Prior Month', total: 0, records: 0 };
+
+    const delta = Number((current.total - previous.total).toFixed(2));
+    const percentage = previous.total > 0
+      ? Number(((delta / previous.total) * 100).toFixed(1))
+      : 0;
+
+    return {
+      currentMonth: current.ym,
+      currentSpend: current.total,
+      previousMonth: previous.ym,
+      previousSpend: previous.total,
+      delta,
+      percentage,
+      isIncrease: delta > 0,
+      summaryText: delta > 0
+        ? `+$${delta.toLocaleString()} (+${percentage}%) vs ${previous.ym}`
+        : `-$${Math.abs(delta).toLocaleString()} (${percentage}%) vs ${previous.ym}`
+    };
+  }
+
+  // --- Budget Management ---
+  getBudget(month = 'global') {
+    const row = this.db.prepare('SELECT * FROM budgets WHERE month = ?').get(month);
+    if (row) return row.amount;
+
+    // Fallback to global
+    const globalRow = this.db.prepare("SELECT * FROM budgets WHERE month = 'global'").get();
+    return globalRow ? globalRow.amount : 65000;
+  }
+
+  setBudget(month, amount) {
+    const validAmount = Math.max(0, Number(Number(amount).toFixed(2)));
+    const now = new Date().toISOString();
+
+    const existing = this.db.prepare('SELECT * FROM budgets WHERE month = ?').get(month);
+    if (existing) {
+      this.db.prepare('UPDATE budgets SET amount = ?, updated_at = ? WHERE month = ?').run(validAmount, now, month);
+    } else {
+      this.db.prepare('INSERT INTO budgets (month, amount, updated_at) VALUES (?, ?, ?)').run(month, validAmount, now);
+    }
+
+    return this.getBudgetStatus(month);
+  }
+
+  getBudgetStatus(month) {
+    const targetMonth = month && month !== 'global' ? month : (this.getLatestMonth() || new Date().toISOString().slice(0, 7));
+    const budgetAmount = this.getBudget(targetMonth);
+
+    const spendRow = this.db.prepare(`
+      SELECT ROUND(SUM(cost), 2) AS monthSpend
+      FROM billing_records
+      WHERE substr(date, 1, 7) = ?
+    `).get(targetMonth);
+
+    const currentSpend = spendRow && spendRow.monthSpend ? spendRow.monthSpend : 0;
+    const remaining = Number((budgetAmount - currentSpend).toFixed(2));
+    const utilizationPct = budgetAmount > 0
+      ? Number(((currentSpend / budgetAmount) * 100).toFixed(1))
+      : 0;
+
+    let alertLevel = 'normal';
+    let alertMessage = 'Budget utilization is healthy.';
+
+    if (utilizationPct >= 100) {
+      alertLevel = 'critical';
+      alertMessage = `Critical: Budget exceeded by $${Math.abs(remaining).toLocaleString(undefined, {minimumFractionDigits: 2})} (${utilizationPct}% utilized)!`;
+    } else if (utilizationPct >= 80) {
+      alertLevel = 'warning';
+      alertMessage = `Warning: High spend alert! Budget is ${utilizationPct}% utilized with $${remaining.toLocaleString(undefined, {minimumFractionDigits: 2})} remaining.`;
+    }
+
+    return {
+      month: targetMonth,
+      budgetAmount,
+      currentSpend,
+      remainingBalance: remaining,
+      utilizationPct,
+      alertLevel,
+      alertMessage
+    };
+  }
+
+  getLatestMonth() {
+    const row = this.db.prepare("SELECT substr(MAX(date), 1, 7) as latestMonth FROM billing_records").get();
+    return row ? row.latestMonth : null;
+  }
+
+  // --- Daily Trends with Filters ---
+  getDailyTrends(days = 30, filter = {}) {
+    let whereClauses = [];
+    let params = [];
+
+    if (filter.startDate) {
+      whereClauses.push('date >= ?');
+      params.push(filter.startDate);
+    }
+    if (filter.endDate) {
+      whereClauses.push('date <= ?');
+      params.push(filter.endDate);
+    }
+    if (filter.month) {
+      whereClauses.push("substr(date, 1, 7) = ?");
+      params.push(filter.month);
+    }
+
+    let whereSql = '';
+    if (whereClauses.length > 0) {
+      whereSql = 'WHERE ' + whereClauses.join(' AND ');
+    } else {
+      const maxDateRow = this.db.prepare('SELECT MAX(date) AS maxDate FROM billing_records').get();
+      if (!maxDateRow || !maxDateRow.maxDate) return [];
+      whereSql = `WHERE date >= date('${maxDateRow.maxDate}', '-${days - 1} day')`;
     }
 
     const rows = this.db.prepare(`
@@ -232,25 +424,44 @@ class FinOpsDB {
         ROUND(SUM(CASE WHEN provider = 'GCP' THEN cost ELSE 0 END), 2) AS gcp,
         ROUND(SUM(CASE WHEN provider = 'Azure' THEN cost ELSE 0 END), 2) AS azure
       FROM billing_records
-      WHERE date >= date(?, '-' || ? || ' day')
+      ${whereSql}
       GROUP BY date
       ORDER BY date ASC
-    `).all(maxDateRow.maxDate, (days - 1).toString());
+    `).all(...params);
 
     return rows;
   }
 
   // --- Provider Spend Split Donut Chart ---
-  getProviderBreakdown() {
+  getProviderBreakdown(filter = {}) {
+    let whereClauses = [];
+    let params = [];
+
+    if (filter.startDate) {
+      whereClauses.push('date >= ?');
+      params.push(filter.startDate);
+    }
+    if (filter.endDate) {
+      whereClauses.push('date <= ?');
+      params.push(filter.endDate);
+    }
+    if (filter.month) {
+      whereClauses.push("substr(date, 1, 7) = ?");
+      params.push(filter.month);
+    }
+
+    const whereSql = whereClauses.length > 0 ? 'WHERE ' + whereClauses.join(' AND ') : '';
+
     const rows = this.db.prepare(`
       SELECT 
         provider,
         ROUND(SUM(cost), 2) AS totalCost,
         COUNT(*) AS recordCount
       FROM billing_records
+      ${whereSql}
       GROUP BY provider
       ORDER BY totalCost DESC
-    `).all();
+    `).all(...params);
 
     const grandTotal = rows.reduce((acc, r) => acc + r.totalCost, 0);
 
@@ -262,34 +473,88 @@ class FinOpsDB {
     }));
   }
 
-  // --- Top 6 Cost-Driving Services Bar Chart ---
-  getTopServices(limit = 6) {
+  // --- Top 5 Costly Services with Search and Sorting ---
+  getTopServices(limit = 5, filter = {}) {
+    let whereClauses = [];
+    let params = [];
+
+    if (filter.startDate) {
+      whereClauses.push('date >= ?');
+      params.push(filter.startDate);
+    }
+    if (filter.endDate) {
+      whereClauses.push('date <= ?');
+      params.push(filter.endDate);
+    }
+    if (filter.month) {
+      whereClauses.push("substr(date, 1, 7) = ?");
+      params.push(filter.month);
+    }
+    if (filter.provider && filter.provider !== 'all') {
+      whereClauses.push('provider = ?');
+      params.push(filter.provider);
+    }
+    if (filter.search) {
+      whereClauses.push('(service LIKE ? OR provider LIKE ? OR category LIKE ?)');
+      const q = `%${filter.search}%`;
+      params.push(q, q, q);
+    }
+
+    let orderSql = 'totalCost DESC';
+    if (filter.sortBy === 'cost_asc') orderSql = 'totalCost ASC';
+    else if (filter.sortBy === 'name_asc') orderSql = 'service ASC';
+    else if (filter.sortBy === 'name_desc') orderSql = 'service DESC';
+
+    const whereSql = whereClauses.length > 0 ? 'WHERE ' + whereClauses.join(' AND ') : '';
+
     const rows = this.db.prepare(`
       SELECT 
         service,
         provider,
         category,
-        ROUND(SUM(cost), 2) AS totalCost
+        ROUND(SUM(cost), 2) AS totalCost,
+        ROUND(AVG(cost), 2) AS avgCost,
+        COUNT(*) AS recordCount
       FROM billing_records
+      ${whereSql}
       GROUP BY service, provider, category
-      ORDER BY totalCost DESC
+      ORDER BY ${orderSql}
       LIMIT ?
-    `).all(limit);
+    `).all(...params, limit);
 
     return rows;
   }
 
-  // --- Category Progress Bars ---
-  getCategoryBreakdown() {
+  // --- Category Breakdown ---
+  getCategoryBreakdown(filter = {}) {
+    let whereClauses = [];
+    let params = [];
+
+    if (filter.startDate) {
+      whereClauses.push('date >= ?');
+      params.push(filter.startDate);
+    }
+    if (filter.endDate) {
+      whereClauses.push('date <= ?');
+      params.push(filter.endDate);
+    }
+    if (filter.month) {
+      whereClauses.push("substr(date, 1, 7) = ?");
+      params.push(filter.month);
+    }
+
+    const whereSql = whereClauses.length > 0 ? 'WHERE ' + whereClauses.join(' AND ') : '';
+
     const rows = this.db.prepare(`
       SELECT 
         category,
         ROUND(SUM(cost), 2) AS totalCost,
         COUNT(*) AS recordCount
       FROM billing_records
+      ${whereSql}
       GROUP BY category
       ORDER BY totalCost DESC
-    `).all();
+    `).all(...params);
 
     const grandTotal = rows.reduce((acc, r) => acc + r.totalCost, 0);
 
@@ -299,6 +564,94 @@ class FinOpsDB {
       recordCount: r.recordCount,
       percentage: grandTotal > 0 ? Number(((r.totalCost / grandTotal) * 100).toFixed(1)) : 0
     }));
+  }
+
+  // --- Savings Calculator Computation ---
+  calculateSavings(percentage = 10, month = null) {
+    const targetMonth = month || this.getLatestMonth();
+    const row = this.db.prepare(`
+      SELECT ROUND(SUM(cost), 2) AS spend
+      FROM billing_records
+      WHERE substr(date, 1, 7) = ?
+    `).get(targetMonth);
+
+    const currentMonthlySpend = row && row.spend ? row.spend : 50000;
+    const pct = Math.min(100, Math.max(1, Number(percentage) || 10));
+
+    const estimatedMonthlySavings = Number(((currentMonthlySpend * pct) / 100).toFixed(2));
+    const estimatedAnnualSavings = Number((estimatedMonthlySavings * 12).toFixed(2));
+    const remainingProjectedCost = Number((currentMonthlySpend - estimatedMonthlySavings).toFixed(2));
+
+    return {
+      percentage: pct,
+      month: targetMonth,
+      currentMonthlySpend,
+      estimatedMonthlySavings,
+      estimatedAnnualSavings,
+      remainingProjectedCost
+    };
+  }
+
+  // --- Paginated Billing Records ---
+  getBillingRecords(options = {}) {
+    const page = Math.max(1, parseInt(options.page) || 1);
+    const limit = Math.max(1, Math.min(100, parseInt(options.limit) || 10));
+    const offset = (page - 1) * limit;
+
+    let whereClauses = [];
+    let params = [];
+
+    if (options.startDate) {
+      whereClauses.push('date >= ?');
+      params.push(options.startDate);
+    }
+    if (options.endDate) {
+      whereClauses.push('date <= ?');
+      params.push(options.endDate);
+    }
+    if (options.month) {
+      whereClauses.push("substr(date, 1, 7) = ?");
+      params.push(options.month);
+    }
+    if (options.provider && options.provider !== 'all') {
+      whereClauses.push('provider = ?');
+      params.push(options.provider);
+    }
+    if (options.category && options.category !== 'all') {
+      whereClauses.push('category = ?');
+      params.push(options.category);
+    }
+    if (options.search) {
+      whereClauses.push('(service LIKE ? OR resource_id LIKE ? OR region LIKE ?)');
+      const q = `%${options.search}%`;
+      params.push(q, q, q);
+    }
+
+    const whereSql = whereClauses.length > 0 ? 'WHERE ' + whereClauses.join(' AND ') : '';
+
+    const countRow = this.db.prepare(`SELECT COUNT(*) as count FROM billing_records ${whereSql}`).get(...params);
+    const total = countRow ? countRow.count : 0;
+    const totalPages = Math.ceil(total / limit);
+
+    let orderSql = 'date DESC, id DESC';
+    if (options.sortBy === 'cost_desc') orderSql = 'cost DESC';
+    else if (options.sortBy === 'cost_asc') orderSql = 'cost ASC';
+    else if (options.sortBy === 'date_asc') orderSql = 'date ASC';
+
+    const records = this.db.prepare(`
+      SELECT * FROM billing_records
+      ${whereSql}
+      ORDER BY ${orderSql}
+      LIMIT ? OFFSET ?
+    `).all(...params, limit, offset);
+
+    return {
+      records,
+      total,
+      page,
+      limit,
+      totalPages
+    };
   }
 
   // --- Anomalies Detection & Management ---
@@ -347,9 +700,7 @@ class FinOpsDB {
     );
   }
 
-  // Statistical deviation detection (>30% variance from 14-day rolling mean)
   runStatisticalAnomalyDetection() {
-    // Computes daily spend by service and flags days where actual cost exceeds rolling 14-day mean by >30%
     const serviceDays = this.db.prepare(`
       SELECT 
         date,
@@ -362,7 +713,6 @@ class FinOpsDB {
       ORDER BY service, date ASC
     `).all();
 
-    // Group by service
     const byService = {};
     for (const row of serviceDays) {
       if (!byService[row.service]) byService[row.service] = [];
@@ -377,7 +727,7 @@ class FinOpsDB {
         const mean = window.reduce((sum, r) => sum + r.daily_cost, 0) / 14;
         const current = records[i];
 
-        if (mean > 20) { // filter out negligible absolute fluctuations
+        if (mean > 20) {
           const deviation = ((current.daily_cost - mean) / mean) * 100;
           if (deviation > 30) {
             detected.push({
@@ -411,7 +761,7 @@ class FinOpsDB {
     const realizedSavings = newStatus === 'applied' ? rec.monthly_savings : 0;
 
     this.db.prepare(`
-      UPDATE recommendations
+      UPDATE recommendations 
       SET status = ?, applied_at = ?, realized_savings = ?
       WHERE id = ?
     `).run(newStatus, appliedAt, realizedSavings, id);
@@ -439,9 +789,31 @@ class FinOpsDB {
     );
   }
 
-  // --- Export Data ---
-  getAllRecords(limit = 10000) {
-    return this.db.prepare('SELECT * FROM billing_records ORDER BY date DESC LIMIT ?').all(limit);
+  // --- Filtered Export Data ---
+  getAllRecords(limit = 20000, filter = {}) {
+    let whereClauses = [];
+    let params = [];
+
+    if (filter.startDate) {
+      whereClauses.push('date >= ?');
+      params.push(filter.startDate);
+    }
+    if (filter.endDate) {
+      whereClauses.push('date <= ?');
+      params.push(filter.endDate);
+    }
+    if (filter.month) {
+      whereClauses.push("substr(date, 1, 7) = ?");
+      params.push(filter.month);
+    }
+    if (filter.provider && filter.provider !== 'all') {
+      whereClauses.push('provider = ?');
+      params.push(filter.provider);
+    }
+
+    const whereSql = whereClauses.length > 0 ? 'WHERE ' + whereClauses.join(' AND ') : '';
+
+    return this.db.prepare(`SELECT * FROM billing_records ${whereSql} ORDER BY date DESC LIMIT ?`).all(...params, limit);
   }
 }
 
